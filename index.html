@@ -401,6 +401,11 @@ body.noscroll{overflow:hidden}
     <button class="btn" id="notifBtn" hidden>🔔 Сануулга зөвшөөрөх</button>
     <button class="btn" id="notifTest" hidden>Туршиж үзэх</button>
     <div class="note">ℹ️ Сануулга зөвхөн апп нээлттэй үед ажиллана. Апп хаалттай үед өнгөрсөн сануулгыг дараа нээхэд улаанаар тэмдэглэнэ. Таймер явж байхад дэлгэц унтрахгүй.</div>
+    <div class="sub">Өгөгдөл</div>
+    <div class="note" id="backupNote"></div>
+    <button class="btn" id="exportBtn">💾 Нөөц хуулбар хадгалах</button>
+    <button class="btn" id="importBtn">📂 Нөөцөөс сэргээх</button>
+    <input type="file" id="importFile" accept="application/json,.json" hidden>
     <div id="appSec" hidden>
       <div class="sub">Апп</div>
       <div class="note" id="installNote"></div>
@@ -844,7 +849,7 @@ function checkReminders(){
   updateTaskTimers();
 }
 const _openSettings=openSettings;
-openSettings=function(){_openSettings(); renderNotif(); renderInstall()};
+openSettings=function(){_openSettings(); renderNotif(); renderInstall(); renderBackup()};
 $("openSet").onclick=openSettings;
 
 // Stopwatch can be attributed to one of the daily tasks: its time counts toward that task's timer and stats.
@@ -1169,6 +1174,71 @@ addEventListener("beforeinstallprompt",e=>{e.preventDefault();installEvt=e;rende
 addEventListener("appinstalled",()=>{installEvt=null;renderInstall();toast("Элсэн цаг суулгагдлаа ⏳")});
 $("installBtn").onclick=async()=>{if(!installEvt)return;installEvt.prompt();try{await installEvt.userChoice}catch(e){}installEvt=null;renderInstall()};
 renderInstall();
+
+/* ---------- backup: everything lives only on this phone, so let people keep a copy ---------- */
+const DATA_KEYS=["elsen_cfg","elsen_hist","elsen_tm","elsen_snap","elsen_sw","elsen_pantry","elsen_foodcfg","elsen_plan"];
+function backupData(){
+  const data={};
+  DATA_KEYS.forEach(k=>{try{const v=localStorage.getItem(k); if(v!=null) data[k]=JSON.parse(v)}catch(e){}});
+  data.elsen_cfg=cfg;                                 // always include the settings in use, even if never saved
+  return {app:"elsen-tsag",version:1,exported:new Date().toISOString(),data};
+}
+function fmtDate(ts){const d=new Date(ts);return `${d.getFullYear()}.${pad(d.getMonth()+1)}.${pad(d.getDate())}`}
+function renderBackup(){
+  const at=store.get("elsen_backup_at",0), days=Object.keys(hist).filter(k=>Object.keys(hist[k]||{}).length).length;
+  $("backupNote").textContent="Өгөгдөл зөвхөн энэ төхөөрөмжид хадгалагддаг. Утас солих, апп устгахаас өмнө нөөц хуулбар хадгалаарай. "+
+    (at?`Сүүлд хадгалсан: ${fmtDate(at)}.`:days?`${days} өдрийн түүх нөөцлөгдөөгүй байна.`:"");
+}
+async function exportBackup(){
+  const name=`elsen-tsag-${dayKey(new Date())}.json`;
+  const blob=new Blob([JSON.stringify(backupData(),null,1)],{type:"application/json"});
+  let done=false;
+  // Phone: share sheet ("Save to Files", Drive, Telegram...). Works in an installed iPhone app where downloads don't.
+  if(matchMedia("(pointer:coarse)").matches&&navigator.canShare){
+    try{const f=new File([blob],name,{type:"application/json"});
+      if(navigator.canShare({files:[f]})){await navigator.share({files:[f],title:"Элсэн цаг · нөөц"}); done=true}}
+    catch(e){if(e&&e.name==="AbortError") return}
+  }
+  // Inside claude.ai the page is sandboxed: use the platform's download capability when it is there.
+  if(!done&&window.claude&&typeof window.claude.use==="function"){
+    try{const dl=await window.claude.use("downloads"); if(dl){await dl.save({filename:name,data:blob}); done=true}}
+    catch(e){if(e&&e.code==="cancelled") return}
+  }
+  if(!done){
+    const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name;
+    document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove()},2000);
+  }
+  store.set("elsen_backup_at",Date.now()); renderBackup(); toast("Нөөц хуулбар хадгаллаа ✓");
+}
+function applyBackup(data){
+  DATA_KEYS.forEach(k=>{try{if(k in data) localStorage.setItem(k,JSON.stringify(data[k])); else localStorage.removeItem(k)}catch(e){}});
+}
+$("exportBtn").onclick=exportBackup;
+$("importBtn").onclick=()=>$("importFile").click();
+$("importFile").onchange=async e=>{
+  const f=e.target.files&&e.target.files[0]; e.target.value=""; if(!f) return;
+  let obj=null; try{obj=JSON.parse(await f.text())}catch(err){}
+  if(!obj||obj.app!=="elsen-tsag"||!obj.data||typeof obj.data!=="object"){toast("Энэ файл Элсэн цагийн нөөц биш байна");return}
+  const days=Object.keys(obj.data.elsen_hist||{}).filter(k=>Object.keys(obj.data.elsen_hist[k]||{}).length).length;
+  toast(`${days} өдрийн түүхтэй нөөц (${fmtDate(obj.exported||Date.now())}). Одоогийн өгөгдлийг солих уу?`,"Сэргээх",()=>{
+    store.set("elsen_undo",backupData());              // one-step undo, offered after the reload
+    applyBackup(obj.data);
+    try{sessionStorage.setItem("elsen_restored","1")}catch(e){}
+    location.reload();
+  },0);
+};
+// After a restore: confirm, and offer to put the previous data back.
+try{
+  if(sessionStorage.getItem("elsen_restored")){
+    sessionStorage.removeItem("elsen_restored");
+    setTimeout(()=>toast("Нөөцөөс сэргээлээ ✓","Буцаах",()=>{
+      const u=store.get("elsen_undo",null); if(!u) return;
+      applyBackup(u.data); localStorage.removeItem("elsen_undo"); location.reload();
+    },12000),300);
+  }
+}catch(e){}
+// Ask the browser not to clear this app's storage when the phone runs low on space.
+try{if(isStandalone()&&navigator.storage&&navigator.storage.persist) navigator.storage.persisted().then(p=>{if(!p)navigator.storage.persist()})}catch(e){}
 
 let swReg=null, updating=false;
 if("serviceWorker" in navigator && /^https?:$/.test(location.protocol)){
