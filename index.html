@@ -459,14 +459,28 @@ let cfg = Object.assign({}, DEFAULT, store.get("elsen_cfg",{}));
 let hist = store.get("elsen_hist",{}); // {dayKey:{taskId:"HH:MM"}}  (unchanged format)
 // Migration: older saved tasks have only {id,name}. Add a timer length (read from the name,
 // e.g. "Ном унших 30 минут" -> 30) and an empty reminder. Nothing existing is removed.
-cfg.tasks=cfg.tasks.map(t=>{
-  const m=/(\d+)\s*(минут|мин)/i.exec(t.name||"");
-  return {id:t.id,name:t.name,min:typeof t.min==="number"?t.min:(m?+m[1]:0),rem:typeof t.rem==="string"?t.rem:""};
+// Saved data can come from an old version or a hand-edited backup: keep what is valid, repair the rest.
+const isHM=s=>typeof s==="string"&&/^([01]\d|2[0-3]):[0-5]\d$/.test(s);
+const isObj=o=>!!o&&typeof o==="object"&&!Array.isArray(o);
+["dayStart","sleepS","sleepE","workS","workE"].forEach(k=>{if(!isHM(cfg[k]))cfg[k]=DEFAULT[k]});
+if(!Array.isArray(cfg.tasks)) cfg.tasks=DEFAULT.tasks;
+cfg.tasks=cfg.tasks.filter(t=>isObj(t)&&t.id!=null&&typeof t.name==="string").map(t=>{
+  const m=/(\d+)\s*(минут|мин)/i.exec(t.name);
+  const min=typeof t.min==="number"&&isFinite(t.min)?Math.max(0,Math.min(600,Math.round(t.min))):(m?Math.min(600,+m[1]):0);
+  return {id:String(t.id),name:t.name,min,rem:isHM(t.rem)?t.rem:""};
 });
+if(!isObj(hist)) hist={};
+for(const k in hist) if(!isObj(hist[k])) delete hist[k];
 // Timer state per day: {dayKey:{taskId:{acc:ms spent, run:start timestamp|null}}}
 let tm = store.get("elsen_tm",{});
+if(!isObj(tm)) tm={};
+for(const k in tm){ if(!isObj(tm[k])){delete tm[k];continue}
+  for(const id in tm[k]){const s=tm[k][id]; if(!isObj(s)||typeof s.acc!=="number"){delete tm[k][id];continue}
+    if(typeof s.run!=="number"||s.run>Date.now()) s.run=null; if(typeof s.base!=="number") s.base=0}}
 // Which tasks the day had (for monthly stats when the list changes): {dayKey:[taskId,...]}
 let snap = store.get("elsen_snap",{});
+if(!isObj(snap)) snap={};
+for(const k in snap) if(!Array.isArray(snap[k])) delete snap[k];
 
 const $ = id => document.getElementById(id);
 const toMin = s => {const [h,m]=s.split(":").map(Number);return h*60+m};
@@ -792,6 +806,7 @@ document.querySelectorAll("nav.tabs button").forEach(b=>b.onclick=()=>showView(b
 
 /* ---------- stopwatch ---------- */
 let sw=Object.assign({acc:0,run:null,laps:[]},store.get("elsen_sw",{}));
+if(typeof sw.acc!=="number"||!isFinite(sw.acc))sw.acc=0; if(typeof sw.run!=="number")sw.run=null; if(!Array.isArray(sw.laps))sw.laps=[];
 const swNow=()=>sw.acc+(sw.run?Date.now()-sw.run:0);
 const swSave=()=>store.set("elsen_sw",sw);
 function fmtSw(ms){
@@ -1036,6 +1051,7 @@ $("mNext").onclick=()=>{if(++statM>11){statM=0;statY++} statSel=null; renderStat
 /* ---------- food + fitness ---------- */
 const QUICK=["Үхрийн мах","Хонины мах","Тахианы мах","Загас","Өндөг","Сүү","Тараг","Ааруул","Будаа","Гурил","Гоймон","Овъёос","Төмс","Лууван","Байцаа","Сонгино","Буурцаг","Алим","Банана","Талх"];
 let pantry=store.get("elsen_pantry",[]);
+if(!Array.isArray(pantry)) pantry=[]; pantry=pantry.filter(x=>typeof x==="string");
 let foodCfg=Object.assign({goal:"Эрүүл хооллолт",ppl:"1",shift:"Өглөөний ээлж",note:""},store.get("elsen_foodcfg",{}));
 let plan=store.get("elsen_plan",null), planDay=0;
 
@@ -1220,6 +1236,7 @@ function renderPlan(){
     box.appendChild(c);
   }
 }
+if(plan){const p=normalizePlan(plan); plan=p?{...p,src:plan.src==="claude"?"claude":"local",at:+plan.at||Date.now()}:null}
 renderPantry(); renderPlan();
 
 /* ---------- toast ---------- */

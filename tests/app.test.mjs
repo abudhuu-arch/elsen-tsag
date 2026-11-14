@@ -71,6 +71,21 @@ test('old saved data migrates without losing history', async t => {
   assert.deepEqual(await page.$$eval('.tbtn', b => b.map(x => x.textContent)), ['▶ 30м']);
 });
 
+test('corrupted or hand-edited data does not break the app', async t => {
+  const bad = {
+    elsen_cfg: { dayStart: 'abc', sleepS: 5, tasks: [{ id: 't1', name: 'Ном 20 мин', min: 'x', rem: '25:99' }, null, { name: 'no id' }, { id: 7, name: 'Гүйх', min: 99999 }] },
+    elsen_hist: { '2026-01-01': 'oops', [keyAgo(1)]: { t1: '08:00' } },
+    elsen_tm: { x: 5, [keyAgo(1)]: { t1: { acc: 'no' }, t7: { acc: 60000, run: 'later' } } },
+    elsen_snap: { [keyAgo(1)]: 'nope' }, elsen_sw: { acc: 'z', laps: 3 }, elsen_pantry: { a: 1 }, elsen_plan: { days: 'no' }
+  };
+  const { page } = await open(t, `()=>{const b=${JSON.stringify(bad)};for(const k in b)localStorage.setItem(k,JSON.stringify(b[k]))}`);
+  const c = await page.evaluate(() => cfg);
+  assert.equal(c.dayStart, '00:00'); assert.equal(c.sleepS, '22:30');
+  assert.deepEqual(c.tasks, [{ id: 't1', name: 'Ном 20 мин', min: 20, rem: '' }, { id: '7', name: 'Гүйх', min: 600, rem: '' }]);
+  assert.match(await page.textContent('#clock'), /^\d\d:\d\d$/);
+  for (const v of ['v-sw', 'v-food', 'v-stat']) await page.click(`nav.tabs button[data-v="${v}"]`);
+});
+
 test('ticking a task updates count, week and storage; keyboard works', async t => {
   const { page } = await open(t);
   await page.click('.task[data-id="t2"]');
