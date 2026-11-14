@@ -222,6 +222,17 @@ select{background:var(--card);border:1px solid var(--line);color:var(--ink);bord
 .pt .bar2 i{display:block;height:100%;background:var(--sand);border-radius:3px}
 .pt .r2{font-size:12px;color:var(--dim);margin-top:5px}
 .empty{font-size:14px;color:var(--mute);text-align:center;padding:8px 0}
+.mv{display:flex;gap:4px;margin-left:auto}
+.mv button{width:34px;height:34px;border-radius:9px;border:1px solid var(--line);background:var(--bg2);color:var(--mute);font:inherit;font-size:15px;cursor:pointer}
+.mv button:disabled{opacity:.3;cursor:default}
+.treset{flex:none;width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:none;color:var(--mute);font-size:17px;cursor:pointer;margin-right:-4px}
+.switch{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 2px;font-size:14px;color:var(--mute);cursor:pointer}
+.switch input{position:absolute;opacity:0;width:1px;height:1px}
+.switch i{flex:none;width:44px;height:26px;border-radius:13px;background:var(--line);position:relative;transition:.2s}
+.switch i::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:var(--mute);transition:.2s}
+.switch input:checked+i{background:var(--sand2)}
+.switch input:checked+i::after{left:21px;background:var(--sand3)}
+.switch input:focus-visible+i{outline:2px solid var(--sand3);outline-offset:2px}
 body.noscroll{overflow:hidden}
 :focus{outline:none}
 :focus-visible{outline:2px solid var(--sand3);outline-offset:2px;border-radius:6px}
@@ -400,6 +411,7 @@ body.noscroll{overflow:hidden}
     <div class="note" id="notifNote"></div>
     <button class="btn" id="notifBtn" hidden>🔔 Сануулга зөвшөөрөх</button>
     <button class="btn" id="notifTest" hidden>Туршиж үзэх</button>
+    <label class="switch"><span>🔊 Дуу ба чичиргээ</span><input type="checkbox" id="soundOn" checked><i aria-hidden="true"></i></label>
     <div class="note">ℹ️ Сануулга зөвхөн апп нээлттэй үед ажиллана. Апп хаалттай үед өнгөрсөн сануулгыг дараа нээхэд улаанаар тэмдэглэнэ. Таймер явж байхад дэлгэц унтрахгүй.</div>
     <div class="sub">Өгөгдөл</div>
     <div class="note" id="backupNote"></div>
@@ -521,9 +533,12 @@ function renderTasks(){
     el.innerHTML=`<div class="box"></div><div class="tx"><div class="t"></div><div class="tp" hidden><i></i></div></div><div class="tm"></div>`;
     el.querySelector(".t").textContent=t.name;
     if(t.min>0&&!done[t.id]){
+      const r=document.createElement("button"); r.className="treset"; r.textContent="↺"; r.hidden=true;
+      r.setAttribute("aria-label","Таймерыг эхнээс нь: "+t.name);
+      r.onclick=e=>{e.stopPropagation(); const s=(tm[k]||{})[t.id]; if(s&&!s.run){s.base=s.acc; saveTm(); updateTaskTimers()}};
       const b=document.createElement("button"); b.className="tbtn";
       b.onclick=e=>{e.stopPropagation(); timerToggle(t)};
-      el.appendChild(b);
+      el.append(r,b);
     }
     el.onclick=()=>{
       const d=todayDone();
@@ -565,7 +580,7 @@ function timerToggle(t){
 }
 function completeTask(k,id,at){const d=hist[k]||(hist[k]={}); if(!d[id]){d[id]=hhmm(at); store.set("elsen_hist",hist)}}
 function timerDone(t){
-  chime(); try{navigator.vibrate&&navigator.vibrate([300,150,300])}catch(e){}
+  chime(); buzz([300,150,300]);
   const msg=`${t.name} · ${t.min} минут дууслаа ✓`;
   toast("⏳ "+msg);
   if(typeof notify==="function") notify("Хугацаа дууслаа",msg,"timer-"+t.id);
@@ -603,7 +618,8 @@ function updateTaskTimers(){
     const tp=el.querySelector(".tp");
     tp.hidden=!(t.min>0&&!done[t.id]&&(running||(p>0&&p<goal)));
     tp.firstChild.style.width=Math.min(100,goal?p/goal*100:0)+"%";
-    const b=el.querySelector(".tbtn");
+    const b=el.querySelector(".tbtn"), rs=el.querySelector(".treset");
+    if(rs) rs.hidden=running||!(p>0&&p<goal);
     if(b){
       const partial=p>0&&p<goal;
       b.textContent=running?`⏸ ${fmtLeft(goal-p)}`:partial?`▶ ${fmtLeft(goal-p)}`:`▶ ${t.min}м`;
@@ -618,8 +634,9 @@ function updateTaskTimers(){
 /* ---------- sound + keep screen on while timing ---------- */
 let actx=null;
 function unlockAudio(){try{actx=actx||new (window.AudioContext||window.webkitAudioContext)(); if(actx.state==="suspended")actx.resume()}catch(e){}}
+function buzz(p){if(cfg.sound===false)return; try{navigator.vibrate&&navigator.vibrate(p)}catch(e){}}
 function chime(){
-  if(!actx) return;
+  if(!actx||cfg.sound===false) return;
   try{const t0=actx.currentTime;
     [0,.35,.7].forEach((d,i)=>{const o=actx.createOscillator(),g=actx.createGain();o.type="sine";o.frequency.value=i===2?1046.5:784;
       g.gain.setValueAtTime(.0001,t0+d);g.gain.exponentialRampToValueAtTime(.3,t0+d+.02);g.gain.exponentialRampToValueAtTime(.0001,t0+d+.32);
@@ -693,6 +710,7 @@ function tick(){
 let draft=[];
 function openSettings(){
   ["dayStart","sleepS","sleepE","workS","workE"].forEach(id=>$(id).value=cfg[id]);
+  $("soundOn").checked=cfg.sound!==false;
   draft=cfg.tasks.map(t=>({...t})); renderEdit(); $("sheet").classList.add("on");
   document.body.classList.add("noscroll"); $("sheet").querySelector(".panel").scrollTop=0;
   setTimeout(()=>$("sheetTitle").focus({preventScroll:true}),0);
@@ -714,6 +732,14 @@ function renderEdit(){
     const mu=document.createElement("span");mu.textContent="мин";
     lm.append(mi,mu); o.appendChild(lm);
     if(typeof remEditor==="function") o.appendChild(remEditor(t));
+    const mv=document.createElement("div"); mv.className="mv";
+    [["↑",-1,"Дээш"],["↓",1,"Доош"]].forEach(([s,d,lab])=>{
+      const x=document.createElement("button"); x.textContent=s; x.setAttribute("aria-label",lab+": "+(t.name||"зүйл"));
+      x.disabled=i+d<0||i+d>=draft.length;
+      x.onclick=()=>{[draft[i],draft[i+d]]=[draft[i+d],draft[i]]; renderEdit(); const bs=$("editList").children[i+d].querySelectorAll(".mv button"); const f=bs[d<0?0:1].disabled?bs[d<0?1:0]:bs[d<0?0:1]; f.focus()};
+      mv.appendChild(x);
+    });
+    o.appendChild(mv);
     wrap.append(r,o); l.appendChild(wrap);
   });
 }
@@ -724,6 +750,7 @@ $("addTask").onclick=()=>{draft.push({id:"t"+Date.now(),name:"",min:0,rem:""});r
 $("save").onclick=()=>{
   ["dayStart","sleepS","sleepE","workS","workE"].forEach(id=>{if($(id).value)cfg[id]=$(id).value});
   cfg.tasks=draft.filter(t=>t.name.trim()).map(t=>({id:t.id,name:t.name.trim(),min:t.min||0,rem:t.rem||""}));
+  cfg.sound=$("soundOn").checked;
   store.set("elsen_cfg",cfg); lastRemCheck=-1; lastKey=dayKey(new Date());
   closeSettings(); drawBar(); renderTasks(); renderWeek(); tick();
   toast("Хадгаллаа ✓");
