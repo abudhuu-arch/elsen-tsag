@@ -184,6 +184,7 @@ select{background:var(--card);border:1px solid var(--line);color:var(--ink);bord
   border-radius:14px;padding:12px 14px;font-size:14px;box-shadow:0 10px 30px rgba(0,0,0,.5);transition:.25s}
 .toast.on{opacity:1;transform:translate(-50%,0);pointer-events:auto}
 .toast span{flex:1}
+.toast button.tx{background:none;color:var(--mute);font-size:20px;padding:4px 6px;line-height:1}
 .toast button{background:var(--sand);color:#2a1d0c;border:0;border-radius:10px;padding:8px 12px;font:inherit;font-weight:700;font-size:13px;cursor:pointer}
 /* monthly stats */
 .mnav{display:flex;align-items:center;justify-content:space-between;margin:14px 0 14px}
@@ -441,7 +442,7 @@ body.noscroll{overflow:hidden}
   </div>
 </div>
 
-<div class="toast" id="toast" role="status" aria-live="polite"><span id="toastMsg"></span><button id="toastBtn" hidden></button></div>
+<div class="toast" id="toast" role="status" aria-live="polite"><span id="toastMsg"></span><button id="toastBtn" hidden></button><button id="toastX" class="tx" aria-label="Хаах" hidden>×</button></div>
 
 <script>
 const DEFAULT = {
@@ -1252,6 +1253,7 @@ let toastT=0;
 function toast(msg,btn,fn,ms){
   $("toastMsg").textContent=msg;
   const b=$("toastBtn"); b.hidden=!btn; b.textContent=btn||""; b.onclick=()=>{$("toast").classList.remove("on"); fn&&fn()};
+  const x=$("toastX"); x.hidden=!btn; x.onclick=()=>{$("toast").classList.remove("on"); clearTimeout(toastT)};
   $("toast").classList.add("on"); clearTimeout(toastT);
   if(ms!==0) toastT=setTimeout(()=>$("toast").classList.remove("on"),ms||4500);
 }
