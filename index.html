@@ -85,6 +85,7 @@ input[type=time]{color-scheme:dark}
 .edit input{flex:1}
 .del{background:none;border:1px solid var(--line);color:#c77;border-radius:10px;width:40px;cursor:pointer;font-size:18px}
 .btn{width:100%;padding:13px;border-radius:12px;border:1px solid var(--sand2);background:var(--card);color:var(--sand);font:inherit;font-weight:600;font-size:15px;cursor:pointer;margin-top:6px}
+.btn:disabled{opacity:.5;cursor:default}
 .btn.primary{background:var(--sand);color:#2a1d0c;border-color:var(--sand)}
 .sub{font-size:12px;color:var(--dim);margin:16px 0 8px;text-transform:uppercase;letter-spacing:.8px}
 /* views + nav */
@@ -525,6 +526,195 @@ $("swLap").onclick=()=>{
   else {sw.acc=0; sw.laps=[];}
   swSave(); swRender();
 };
+
+/* ---------- food + fitness ---------- */
+const QUICK=["Үхрийн мах","Хонины мах","Тахианы мах","Загас","Өндөг","Сүү","Тараг","Ааруул","Будаа","Гурил","Гоймон","Овъёос","Төмс","Лууван","Байцаа","Сонгино","Буурцаг","Алим","Банана","Талх"];
+let pantry=store.get("elsen_pantry",[]);
+let foodCfg=Object.assign({goal:"Эрүүл хооллолт",ppl:"1",shift:"Өглөөний ээлж",note:""},store.get("elsen_foodcfg",{}));
+let plan=store.get("elsen_plan",null), planDay=0;
+
+function renderPantry(){
+  const p=$("pantry"); p.innerHTML="";
+  pantry.forEach((it,i)=>{
+    const c=document.createElement("span"); c.className="pchip";
+    const s=document.createElement("span"); s.textContent=it;
+    const b=document.createElement("button"); b.textContent="×"; b.setAttribute("aria-label","Хасах");
+    b.onclick=()=>{pantry.splice(i,1); store.set("elsen_pantry",pantry); renderPantry()};
+    c.append(s,b); p.appendChild(c);
+  });
+  $("pCnt").textContent=pantry.length;
+  const q=$("quick"); q.innerHTML="";
+  QUICK.forEach(it=>{
+    const has=pantry.some(x=>x.toLowerCase()===it.toLowerCase());
+    const c=document.createElement("button"); c.className="chip"+(has?" on":""); c.textContent=it;
+    c.onclick=()=>{ if(has) pantry=pantry.filter(x=>x.toLowerCase()!==it.toLowerCase()); else pantry.push(it);
+      store.set("elsen_pantry",pantry); renderPantry(); };
+    q.appendChild(c);
+  });
+}
+function addPantry(){
+  const v=$("pIn").value.trim(); if(!v) return;
+  v.split(/[,;\n]/).map(s=>s.trim()).filter(Boolean).forEach(s=>{if(!pantry.some(x=>x.toLowerCase()===s.toLowerCase()))pantry.push(s)});
+  $("pIn").value=""; store.set("elsen_pantry",pantry); renderPantry();
+}
+$("pAdd").onclick=addPantry;
+$("pIn").onkeydown=e=>{if(e.key==="Enter")addPantry()};
+["goal","ppl","shift","note"].forEach(id=>{
+  $(id).value=foodCfg[id];
+  $(id).onchange=()=>{foodCfg[id]=$(id).value; store.set("elsen_foodcfg",foodCfg)};
+});
+
+const PLAN_DAYS=["Даваа","Мягмар","Лхагва","Пүрэв","Баасан","Бямба","Ням"];
+const MEAL_LABELS={
+  "Өглөөний ээлж":["Өглөө · 06:15","Өдөр · 12:00","Орой · 19:00","Зууш"],
+  "Оройн ээлж":["Өглөө · 09:00","Ажлын өмнө · 13:30","Ажил дээр · 19:30","Зууш"],
+  "Шөнийн ээлж":["Сэрээд · 14:00","Ажлын өмнө · 20:00","Шөнө · 02:00","Зууш"],
+  "Ээлж солигддог":["1-р хоол","2-р хоол","3-р хоол","Зууш"]
+};
+const MEAL_KEYS=["breakfast","lunch","dinner","snack"];
+
+/* Works without network or Claude: builds a 7-day plan from a built-in recipe list,
+   preferring dishes that use what is already at home. */
+function fallbackPlan(o){
+  o=o||{}; const pan=(o.pantry||[]).map(s=>s.toLowerCase());
+  const has=k=>pan.some(p=>p.includes(k));
+  const note=(o.note||"").toLowerCase();
+  const neg=/идэхгүй|хэрэггүй|харшил|үгүй|биш|болохгүй/.test(note);
+  const banned=neg?note.split(/[^а-яөүё]+/i).filter(w=>w.length>3).map(w=>w.slice(0,4)):[];
+  const ok=m=>!banned.some(b=>(m.n+" "+m.k.join(" ")).toLowerCase().includes(b));
+  const B=[
+    {n:"Овъёосны будаа сүүтэй, алим, самартай",k:["овъёос","сүү"],l:1},
+    {n:"Чанасан өндөг 2, бүхэл үрийн талх, ногоон салат",k:["өндөг","талх"],l:1},
+    {n:"Лууван, сонгинотой өндөгний омлет",k:["өндөг","лууван"],l:1},
+    {n:"Тараг, банана, овъёос",k:["тараг","банана"],l:1},
+    {n:"Сүүтэй цай, ааруул, талх",k:["сүү","ааруул"],l:0},
+    {n:"Будаатай сүүн шөл",k:["будаа","сүү"],l:0},
+    {n:"Өндөгтэй шарсан талх, улаан лооль",k:["өндөг","талх"],l:0}
+  ];
+  const M=[
+    {n:"Үхрийн махтай ногоотой шөл",k:["үхрийн","төмс","лууван"],l:1},
+    {n:"Тахианы мах, будаа, жигнэсэн ногоо",k:["тахиа","будаа"],l:1},
+    {n:"Гуляш (үхрийн мах, төмс, лууван)",k:["үхрийн","төмс"],l:0},
+    {n:"Цуйван (мах, байцаа, лууван)",k:["гурил","мах","байцаа"],l:0},
+    {n:"Шарсан загас, төмсний нухаш, салат",k:["загас","төмс"],l:1},
+    {n:"Хонины махтай гоймонтой шөл",k:["хонин","гоймон"],l:0},
+    {n:"Буурцагтай ногооны шөл",k:["буурцаг","лууван"],l:1},
+    {n:"Байцаатай хуурсан мах, будаа",k:["байцаа","мах","будаа"],l:1},
+    {n:"Тахианы шөл гоймонтой",k:["тахиа","гоймон"],l:1},
+    {n:"Банштай шөл",k:["гурил","мах","сонгино"],l:0},
+    {n:"Ногоотой будаа, чанасан өндөг",k:["будаа","өндөг"],l:1},
+    {n:"Махтай хуурга, төмс, байцааны салат",k:["мах","төмс","байцаа"],l:0}
+  ];
+  const S=[
+    {n:"Алим, самар",k:["алим"],l:1},{n:"Тараг",k:["тараг"],l:1},{n:"Ааруул, цай",k:["ааруул"],l:1},
+    {n:"Банана",k:["банана"],l:1},{n:"Чанасан өндөг",k:["өндөг"],l:1},{n:"Лууван, байцааны салат",k:["лууван","байцаа"],l:1}
+  ];
+  const light=o.goal==="Жин хасах";
+  const rank=list=>list.filter(ok).map((m,i)=>({m,s:m.k.filter(has).length*2+(light&&m.l?1:0)-i*0.01}))
+    .sort((a,b)=>b.s-a.s).map(x=>x.m);
+  const b=rank(B), m=rank(M), s=rank(S);
+  const pick=(arr,i)=>arr.length?arr[i%arr.length].n:"Өөрийн дуртай эрүүл хоол";
+  const extra=o.goal==="Булчин нэмэх"?" + нэмэлт уураг (өндөг/тараг)":light?" (жижиг порц)":"";
+  const W={
+    "Жин хасах":[["Хурдан алхах 40 мин","Суниах 10 мин"],["HIIT 20 мин","Суниах 3×20"],["Гүйх 30 мин"],["Амралт: хөнгөн алхалт 20 мин"],["Гүйх 30 мин","Планк 3×40 сек"],["Дугуй эсвэл уул авирах 45 мин"],["Амралт, сунгалт 15 мин"]],
+    "Булчин нэмэх":[["Түлхэх: суниах 4×15","Дипс 3×10"],["Татах: суниалт/тэнхлэг 4×8","Ёроол 3×12"],["Хөл: суулт 4×20","Довтлох 3×12"],["Амралт, сунгалт"],["Бүх бие: бөрпи 3×10","Суниах 3×20"],["Хөл, гэдэс: суулт 4×25","Планк 3×60 сек"],["Амралт"]],
+    "Эрч хүч нэмэх":[["Өглөөний гүйлт 20 мин"],["Йог/сунгалт 20 мин"],["Гүйх 30 мин"],["Алхах 30 мин"],["HIIT 15 мин"],["Байгальд алхах 60 мин"],["Амралт, амьсгалын дасгал 10 мин"]],
+    "Эрүүл хооллолт":[["Гүйх 30 мин"],["Суниах 3×20","Суулт 3×20"],["Алхах 40 мин"],["Сунгалт 20 мин"],["Гүйх 30 мин"],["Идэвхтэй амралт: дугуй, сагсан бөмбөг"],["Амралт"]]
+  };
+  const wk=W[o.goal]||W["Эрүүл хооллолт"];
+  const days=PLAN_DAYS.map((d,i)=>({day:d,breakfast:pick(b,i),lunch:pick(m,i*2)+extra,dinner:pick(m,i*2+1),snack:pick(s,i),workout:wk[i]}));
+  const uses=(o.pantry||[]).map(item=>{
+    const k=item.toLowerCase(), hit=[];
+    days.forEach(d=>MEAL_KEYS.forEach(mk=>{if(hit.length<3){const t=d[mk].toLowerCase();
+      if(k.split(/\s+/).some(w=>w.length>2&&t.includes(w.slice(0,Math.max(3,w.length-2))))&&!hit.includes(d.day))hit.push(d.day)}}));
+    return {item,how:hit.length?[...new Set(hit)].join(", ")+" гаригт ашиглана":"Энэ 7 хоногт ороогүй. Зууш эсвэл нэмэлт болгон ашиглаарай"};
+  });
+  const tips={
+    "Жин хасах":["Оройн хоолоо унтахаас 3 цагийн өмнө идээрэй","Таваг дээрх ногоог хоолны тэн хагаст хүргээрэй","Чихэртэй ундааг усаар солиорой"],
+    "Булчин нэмэх":["Хоол бүрт уураг (мах, өндөг, тараг) байлгаарай","Дасгалын дараа 1 цагийн дотор хооллоорой","7–8 цаг унтаарай. Булчин унтах үед өсдөг"],
+    "Эрч хүч нэмэх":["Өглөөний цайгаа алгасахгүй","Өдөрт 2 литр ус уугаарай","Чихэр биш, бүхэл үр тариа сонгоорой"],
+    "Эрүүл хооллолт":["Өдөрт 5 янзын өнгөтэй ногоо, жимс идэхийг хичээгээрэй","Давс, тосыг багасгаарай","Хоолоо тогтмол цагт идээрэй"]
+  }[o.goal]||[];
+  const t=[...tips];
+  if(o.shift==="Шөнийн ээлж") t.push("Шөнийн ээлжинд хүнд хоолноос зайлсхийж, хөнгөн зууш авч яваарай");
+  if(+o.ppl>1) t.push(`${o.ppl} хүнд: орцыг ${o.ppl} дахин нэмээрэй`);
+  if(o.note) t.push("Нэмэлт хүсэлтийг офлайн горимд бүрэн тооцох боломжгүй. Тохирохгүй хоолыг өөрөө сольж болно");
+  return {days,uses,tips:t};
+}
+
+function normalizePlan(p){
+  if(!p||!Array.isArray(p.days)||!p.days.length) return null;
+  const str=v=>typeof v==="string"?v:(v==null?"":String(v));
+  return {
+    days:p.days.slice(0,7).map((d,i)=>({day:str(d.day)||PLAN_DAYS[i],breakfast:str(d.breakfast),lunch:str(d.lunch),dinner:str(d.dinner),snack:str(d.snack),
+      workout:Array.isArray(d.workout)?d.workout.map(str):[str(d.workout)].filter(Boolean)})),
+    uses:Array.isArray(p.uses)?p.uses.map(u=>({item:str(u.item),how:str(u.how)})):[],
+    tips:Array.isArray(p.tips)?p.tips.map(str):[]
+  };
+}
+async function getSample(){
+  // claude.ai artifact: window.claude.use("sample") resolves; standalone PWA: no window.claude -> null
+  try{ if(window.claude&&typeof window.claude.use==="function") return await window.claude.use("sample"); }catch(e){}
+  return null;
+}
+function planPrompt(o){
+  return `Чи хоол зүйч, фитнес дасгалжуулагч. Монгол хэлээр 7 хоногийн хоол ба дасгалын хөтөлбөр гарга.
+Зорилго: ${o.goal}. Хүний тоо: ${o.ppl}. Ажлын ээлж: ${o.shift}.
+Гэрт байгаа хүнс: ${o.pantry.length?o.pantry.join(", "):"(жагсаалт хоосон)"}.
+Нэмэлт: ${o.note||"байхгүй"}.
+Гэрт байгаа хүнсийг аль болох ашигла, монгол гэр бүлд энгийн хоол санал болго.
+Зөвхөн JSON буцаа, өөр текстгүй:
+{"days":[{"day":"Даваа","breakfast":"...","lunch":"...","dinner":"...","snack":"...","workout":["...","..."]}, ... 7 өдөр Даваагаас Ням хүртэл],
+ "uses":[{"item":"гэрт байгаа хүнс","how":"хэрхэн, аль өдөр ашиглах"}],
+ "tips":["богино зөвлөмж", "..."]}`;
+}
+$("gen").onclick=async()=>{
+  const btn=$("gen"), st=$("genStatus");
+  const o={...foodCfg,pantry:[...pantry]};
+  btn.disabled=true; st.textContent="Хөтөлбөр бэлдэж байна…";
+  let p=null, src="local";
+  if(navigator.onLine!==false){
+    const sample=await getSample();
+    if(sample){
+      try{ st.textContent="Claude хөтөлбөр гаргаж байна…"; p=normalizePlan(await sample.json(planPrompt(o))); if(p) src="claude"; }
+      catch(e){ p=null; }
+    }
+  }
+  if(!p) p=fallbackPlan(o);
+  plan={...p,src,at:Date.now()}; planDay=0;
+  store.set("elsen_plan",plan); btn.disabled=false; renderPlan();
+};
+function renderPlan(){
+  const box=$("plan"), st=$("genStatus"); box.innerHTML="";
+  if(!plan){st.textContent="";return}
+  const d=new Date(plan.at);
+  st.textContent=(plan.src==="claude"?"Claude гаргасан":"Апп дотор бэлдсэн (офлайн)")+` · ${d.getMonth()+1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const tabs=document.createElement("div"); tabs.className="daytabs";
+  plan.days.forEach((x,i)=>{const c=document.createElement("button");c.className="chip"+(i===planDay?" on":"");c.textContent=x.day;
+    c.onclick=()=>{planDay=i;renderPlan()};tabs.appendChild(c)});
+  box.appendChild(tabs);
+  const day=plan.days[planDay]||plan.days[0], labels=MEAL_LABELS[foodCfg.shift]||MEAL_LABELS["Ээлж солигддог"];
+  const card=document.createElement("div"); card.className="card";
+  MEAL_KEYS.forEach((k,i)=>{ if(!day[k])return; const m=document.createElement("div"); m.className="meal";
+    m.innerHTML=`<div class="k"></div><div class="v"></div>`; m.querySelector(".k").textContent=labels[i]; m.querySelector(".v").textContent=day[k]; card.appendChild(m); });
+  if(day.workout&&day.workout.length){
+    const m=document.createElement("div"); m.className="meal"; m.innerHTML=`<div class="k">Дасгал</div><ul class="ex v"></ul>`;
+    day.workout.forEach(w=>{const li=document.createElement("li");li.textContent=w;m.querySelector("ul").appendChild(li)});
+    card.appendChild(m);
+  }
+  box.appendChild(card);
+  if(plan.uses&&plan.uses.length){
+    const c=document.createElement("div"); c.className="card"; c.innerHTML=`<div class="sub" style="margin-top:0">Гэрийн хүнсийг ашиглах</div>`;
+    plan.uses.forEach(u=>{const r=document.createElement("div");r.className="use";const b=document.createElement("b");b.textContent=u.item;const s=document.createElement("span");s.textContent=u.how;r.append(b,s);c.appendChild(r)});
+    box.appendChild(c);
+  }
+  if(plan.tips&&plan.tips.length){
+    const c=document.createElement("div"); c.className="card"; c.innerHTML=`<div class="sub" style="margin-top:0">Зөвлөмж</div>`;
+    plan.tips.forEach(t=>{const r=document.createElement("div");r.className="tip";r.textContent=t;c.appendChild(r)});
+    box.appendChild(c);
+  }
+}
+renderPantry(); renderPlan();
 
 let startView="v-day"; try{startView=sessionStorage.getItem("elsen_view")||"v-day"}catch(e){}
 
