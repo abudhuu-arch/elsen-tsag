@@ -186,7 +186,7 @@ select{background:var(--card);border:1px solid var(--line);color:var(--ink);bord
 .tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
 .tile .k{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.8px}
-.tile .v{font-family:"Cormorant Garamond",serif;font-size:34px;font-weight:600;line-height:1.1;margin-top:4px;color:var(--ink);font-variant-numeric:tabular-nums}
+.tile .v{font-family:"Cormorant Garamond",serif;font-size:34px;font-weight:600;line-height:1.1;margin-top:4px;color:var(--ink);font-variant-numeric:lining-nums tabular-nums}
 .tile .v small{font-family:Manrope,system-ui,sans-serif;font-size:13px;color:var(--mute);font-weight:500;margin-left:3px}
 .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
 .cal-h{margin-bottom:6px}
@@ -553,6 +553,8 @@ function renderTasks(){
   $("cnt").textContent=c; $("tot").textContent=tot;
   $("prog").style.width=(tot?c/tot*100:0)+"%";
   $("alldone").classList.toggle("on", tot>0 && c===tot);
+  // Number of things left today on the installed app icon (where supported)
+  try{if(navigator.setAppBadge){const left=tot-c; (left>0?navigator.setAppBadge(left):navigator.clearAppBadge()).catch(()=>{})}}catch(e){}
   updateTaskTimers();
 }
 // A day is scored against the tasks it had (snapshot); days before snapshots existed use today's list.
@@ -1285,6 +1287,8 @@ if("serviceWorker" in navigator && /^https?:$/.test(location.protocol)){
 try{if(matchMedia("(prefers-reduced-motion: reduce)").matches)document.querySelector("svg.glass").pauseAnimations()}catch(e){}
 
 let startView="v-day"; try{startView=sessionStorage.getItem("elsen_view")||"v-day"}catch(e){}
+// Home-screen shortcuts open a tab directly: ./?v=v-sw, ./?v=v-stat
+try{const q=new URLSearchParams(location.search).get("v"); if(q&&$(q)&&$(q).classList.contains("view")){startView=q; history.replaceState(null,"",location.pathname)}}catch(e){}
 
 drawBar(); renderTasks(); renderWeek(); tick();
 setInterval(tick,1000);

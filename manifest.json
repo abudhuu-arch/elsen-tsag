@@ -12,11 +12,20 @@
   "background_color": "#0f0d0b",
   "theme_color": "#0f0d0b",
   "categories": ["productivity", "lifestyle", "health"],
+  "launch_handler": { "client_mode": "focus-existing" },
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
     { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
     { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "Секундомер", "short_name": "Секундомер", "url": "./?v=v-sw", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Сарын статистик", "short_name": "Статистик", "url": "./?v=v-stat", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ],
+  "screenshots": [
+    { "src": "screenshots/day.png", "sizes": "780x1688", "type": "image/png", "form_factor": "narrow", "label": "Өдрийн элсэн цаг ба заавал хийх зүйлс" },
+    { "src": "screenshots/stats.png", "sizes": "780x1688", "type": "image/png", "form_factor": "narrow", "label": "Сарын статистик" }
   ]
 }
