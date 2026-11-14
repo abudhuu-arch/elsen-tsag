@@ -188,6 +188,11 @@ select{background:var(--card);border:1px solid var(--line);color:var(--ink);bord
 .tile .k{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.8px}
 .tile .v{font-family:"Cormorant Garamond",serif;font-size:34px;font-weight:600;line-height:1.1;margin-top:4px;color:var(--ink);font-variant-numeric:lining-nums tabular-nums}
 .tile .v small{font-family:Manrope,system-ui,sans-serif;font-size:13px;color:var(--mute);font-weight:500;margin-left:3px}
+.tile .delta{font-size:12px;color:var(--sand);margin-top:4px;font-variant-numeric:tabular-nums}
+.tile .delta span{color:var(--dim)}
+.insight{display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:space-between;font-size:13px;color:var(--mute);background:var(--card);border:1px solid var(--line);border-radius:14px;padding:11px 14px;margin-top:10px}
+.insight b{color:var(--sand3);font-weight:600}
+.insight[hidden]{display:none}
 .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
 .cal-h{margin-bottom:6px}
 .cal-h span{text-align:center;font-size:10px;color:var(--dim)}
@@ -348,6 +353,7 @@ body.noscroll{overflow:hidden}
       <button class="iconbtn" id="mNext" aria-label="Дараагийн сар">›</button>
     </div>
     <div class="tiles" id="tiles"></div>
+    <div class="insight" id="insight" hidden></div>
     <section>
       <div class="sh"><h2>Өдөр бүрийн биелэлт</h2></div>
       <div class="card">
@@ -910,6 +916,17 @@ function firstUseKey(){
 }
 function dayMinutes(k){let ms=0;const d=tm[k]||{};for(const id in d) ms+=tmSpent(d[id]);return ms/60000}
 function levelOf(c,tot){if(!tot||!c)return 0;const p=c/tot;return p>=1?4:p>2/3?3:p>1/3?2:1}
+// Days of a month that count (from first use up to today) and their totals.
+function monthSummary(y,m,first,today){
+  const nDays=new Date(y,m+1,0).getDate(), days=[];
+  for(let d=1;d<=nDays;d++){const k=keyOf(y,m,d); days.push({d,k,on:k>=first&&k<=today})}
+  const counted=days.filter(x=>x.on);
+  let full=0,sumPct=0,run=0,best=0,mins=0;
+  counted.forEach(x=>{const s=scoreFor(x.k); x.s=s; sumPct+=s.tot?s.c/s.tot:0;
+    if(s.tot&&s.c===s.tot){full++;run++;best=Math.max(best,run)} else if(x.k!==today) run=0;
+    mins+=dayMinutes(x.k)});
+  return {days,counted,full,best,mins,avg:counted.length?Math.round(sumPct/counted.length*100):0};
+}
 function renderStats(){
   const today=dayKey(new Date()), [ty,tmo]=today.split("-").map(Number), first=firstUseKey();
   if(statY===null){statY=ty;statM=tmo-1}
@@ -919,21 +936,34 @@ function renderStats(){
   $("mPrev").disabled=y*12+m<=fy*12+fm-1;
   $("mNext").disabled=y*12+m>=ty*12+tmo-1;
 
-  // which days of this month count: from first use up to today
-  const days=[];
-  for(let d=1;d<=nDays;d++){const k=keyOf(y,m,d); days.push({d,k,on:k>=first&&k<=today})}
-  const counted=days.filter(x=>x.on);
-  let full=0,sumPct=0,run=0,best=0,mins=0;
-  counted.forEach(x=>{const s=scoreFor(x.k); x.s=s; const p=s.tot?s.c/s.tot:0; sumPct+=p;
-    if(s.tot&&s.c===s.tot){full++;run++;best=Math.max(best,run)} else if(x.k!==today) run=0;
-    mins+=dayMinutes(x.k)});
-  const avg=counted.length?Math.round(sumPct/counted.length*100):0;
-  const tile=(k,v,sub)=>`<div class="tile"><div class="k">${k}</div><div class="v">${v}${sub?`<small>${sub}</small>`:""}</div></div>`;
+  const {days,counted,full,avg,best,mins}=monthSummary(y,m,first,today);
+  const prev=monthSummary(m?y:y-1,m?m-1:11,first,today);
+  const tile=(k,v,sub,foot)=>`<div class="tile"><div class="k">${k}</div><div class="v">${v}${sub?`<small>${sub}</small>`:""}</div>${foot||""}</div>`;
+  let delta="";
+  if(prev.counted.length>=7&&counted.length){
+    const d=avg-prev.avg;
+    delta=`<div class="delta">${d>0?`▲ ${d}% <span>өмнөх сараас</span>`:d<0?`▼ ${-d}% <span>өмнөх сараас</span>`:`<span>Өмнөх сартай ижил</span>`}</div>`;
+  }
+  const rm=Math.round(mins);
   $("tiles").innerHTML=
     tile("Бүрэн өдөр",full,`/ ${counted.length} өдөр`)+
-    tile("Дундаж биелэлт",avg,"%")+
-    tile("Зарцуулсан цаг",mins>=60?Math.floor(mins/60):Math.round(mins),mins>=60?`ц ${Math.round(mins%60)}м`:"мин")+
+    tile("Дундаж биелэлт",avg,"%",delta)+
+    tile("Зарцуулсан цаг",rm>=60?Math.floor(rm/60):rm,rm>=60?`ц ${rm%60}м`:"мин")+
     tile("Урт дараалал",best,"өдөр");
+
+  // which weekday goes best / worst (needs at least two weeks of data)
+  const wk=[0,1,2,3,4,5,6].map(()=>({s:0,n:0}));
+  counted.forEach(x=>{if(x.k===today)return; const w=new Date(y,m,x.d).getDay(); wk[w].s+=x.s.tot?x.s.c/x.s.tot:0; wk[w].n++});
+  const ranked=wk.map((v,i)=>({i,p:v.n>=2?v.s/v.n:null})).filter(v=>v.p!==null).sort((a,b)=>b.p-a.p);
+  const ins=$("insight");
+  // only name a weekday when it clearly stands out (no ties, ≥10 points apart from the rest)
+  const parts=[], n=ranked.length;
+  if(n>=5&&ranked[0].p-ranked[n-1].p>=0.1){
+    const hi=ranked[0], lo=ranked[n-1];
+    if(hi.p-ranked[1].p>=0.05) parts.push(`<span>💪 Хамгийн сайн: <b>${WD_FULL[hi.i]}</b> ${Math.round(hi.p*100)}%</span>`);
+    if(ranked[n-2].p-lo.p>=0.05) parts.push(`<span>🌱 Анхаарах: <b>${WD_FULL[lo.i]}</b> ${Math.round(lo.p*100)}%</span>`);
+  }
+  ins.innerHTML=parts.join(""); ins.hidden=!parts.length;
 
   // calendar heatmap (weeks start on Monday)
   const cal=$("cal"); cal.innerHTML="";
