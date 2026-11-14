@@ -68,6 +68,20 @@ h2{font-family:"Cormorant Garamond",serif;font-size:24px;font-weight:600;color:v
 .task .t{flex:1;font-size:15px;font-weight:500}
 .task.done .t{color:var(--mute);text-decoration:line-through;text-decoration-color:var(--dim)}
 .task .tm{font-size:11px;color:var(--dim)}
+.task .tx{flex:1;min-width:0}
+.tp{height:3px;background:var(--bg2);border-radius:2px;overflow:hidden;margin-top:7px}
+.tp i{display:block;height:100%;background:var(--sand);border-radius:2px;transition:width .9s linear}
+.tbtn{flex:none;min-width:74px;background:var(--bg2);border:1px solid var(--line);color:var(--sand);border-radius:10px;padding:8px 10px;font:inherit;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;cursor:pointer}
+.task.running{border-color:var(--sand2);box-shadow:0 0 0 1px rgba(227,178,107,.15) inset}
+.task.running .tbtn{background:var(--sand);color:#2a1d0c;border-color:var(--sand)}
+.tm.late{color:#e08a7a}
+.editbox{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px;margin-bottom:8px}
+.editbox .edit{margin-bottom:6px}
+.editbox .edit input{background:var(--bg2)}
+.opts{display:flex;gap:8px;flex-wrap:wrap}
+.opts label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--mute)}
+.opts input{background:var(--bg2);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:7px 8px;font:inherit;font-size:14px;color-scheme:dark}
+.opts input[type=number]{width:62px}
 .alldone{display:none;text-align:center;padding:14px;border-radius:14px;background:linear-gradient(135deg,#2b2214,#1d1a12);border:1px solid var(--sand2);color:var(--sand3);font-size:14px;margin-bottom:8px}
 .alldone.on{display:block}
 
@@ -336,7 +350,17 @@ const store = {
   set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
 };
 let cfg = Object.assign({}, DEFAULT, store.get("elsen_cfg",{}));
-let hist = store.get("elsen_hist",{}); // {dayKey:{taskId:"HH:MM"}}
+let hist = store.get("elsen_hist",{}); // {dayKey:{taskId:"HH:MM"}}  (unchanged format)
+// Migration: older saved tasks have only {id,name}. Add a timer length (read from the name,
+// e.g. "Ном унших 30 минут" -> 30) and an empty reminder. Nothing existing is removed.
+cfg.tasks=cfg.tasks.map(t=>{
+  const m=/(\d+)\s*(минут|мин)/i.exec(t.name||"");
+  return {id:t.id,name:t.name,min:typeof t.min==="number"?t.min:(m?+m[1]:0),rem:typeof t.rem==="string"?t.rem:""};
+});
+// Timer state per day: {dayKey:{taskId:{acc:ms spent, run:start timestamp|null}}}
+let tm = store.get("elsen_tm",{});
+// Which tasks the day had (for monthly stats when the list changes): {dayKey:[taskId,...]}
+let snap = store.get("elsen_snap",{});
 
 const $ = id => document.getElementById(id);
 const toMin = s => {const [h,m]=s.split(":").map(Number);return h*60+m};
@@ -398,17 +422,26 @@ function drawBar(){
 }
 
 /* ---------- tasks ---------- */
+const hhmm=d=>`${pad(d.getHours())}:${pad(d.getMinutes())}`;
 function todayDone(){const k=dayKey(new Date());return hist[k]||(hist[k]={})}
 function renderTasks(){
-  const done=todayDone(), box=$("tasks"); box.innerHTML="";
+  const k=dayKey(new Date()), done=todayDone(), box=$("tasks"); box.innerHTML="";
+  const ids=cfg.tasks.map(t=>t.id);
+  if((snap[k]||[]).join()!==ids.join()){snap[k]=ids; store.set("elsen_snap",snap)}
   cfg.tasks.forEach(t=>{
     const el=document.createElement("div");
-    el.className="task"+(done[t.id]?" done":"");
-    el.innerHTML=`<div class="box"></div><div class="t"></div><div class="tm">${done[t.id]||""}</div>`;
+    el.className="task"+(done[t.id]?" done":""); el.dataset.id=t.id;
+    el.innerHTML=`<div class="box"></div><div class="tx"><div class="t"></div><div class="tp" hidden><i></i></div></div><div class="tm"></div>`;
     el.querySelector(".t").textContent=t.name;
+    if(t.min>0&&!done[t.id]){
+      const b=document.createElement("button"); b.className="tbtn";
+      b.onclick=e=>{e.stopPropagation(); timerToggle(t)};
+      el.appendChild(b);
+    }
     el.onclick=()=>{
       const d=todayDone();
-      if(d[t.id]) delete d[t.id]; else {const n=new Date();d[t.id]=`${pad(n.getHours())}:${pad(n.getMinutes())}`}
+      if(d[t.id]) delete d[t.id];
+      else { d[t.id]=hhmm(new Date()); const s=(tm[k]||{})[t.id]; if(s&&s.run){s.acc+=Date.now()-s.run;s.run=null;saveTm();updateWakeLock()} }
       store.set("elsen_hist",hist); renderTasks(); renderWeek();
     };
     box.appendChild(el);
@@ -417,8 +450,95 @@ function renderTasks(){
   $("cnt").textContent=c; $("tot").textContent=tot;
   $("prog").style.width=(tot?c/tot*100:0)+"%";
   $("alldone").classList.toggle("on", tot>0 && c===tot);
+  updateTaskTimers();
 }
-function scoreFor(k){const d=hist[k]||{};const c=cfg.tasks.filter(t=>d[t.id]).length;return{c,tot:cfg.tasks.length}}
+// A day is scored against the tasks it had (snapshot); days before snapshots existed use today's list.
+function scoreFor(k){const ids=snap[k]||cfg.tasks.map(t=>t.id), d=hist[k]||{};return{c:ids.filter(id=>d[id]).length,tot:ids.length}}
+
+/* ---------- task timers ---------- */
+const saveTm=()=>store.set("elsen_tm",tm);
+const tmSpent=s=>s.acc+(s.run?Date.now()-s.run:0);             // total time spent (for stats)
+const tmProg=s=>tmSpent(s)-(s.base||0);                          // progress of the current countdown
+function tmGet(k,id){const d=tm[k]||(tm[k]={});return d[id]||(d[id]={acc:0,run:null,base:0})}
+function anyTimerRunning(){for(const k in tm)for(const id in tm[k])if(tm[k][id].run)return true;return false}
+function pauseAllTimers(){for(const k in tm)for(const id in tm[k]){const s=tm[k][id];if(s.run){s.acc+=Date.now()-s.run;s.run=null}}}
+function fmtLeft(ms){const s=Math.ceil(ms/1000),h=Math.floor(s/3600),m=Math.floor(s%3600/60);return (h?h+":"+pad(m):pad(m))+":"+pad(s%60)}
+function timerToggle(t){
+  unlockAudio();
+  const k=dayKey(new Date()), s=tmGet(k,t.id), goal=t.min*60000;
+  if(s.run){ s.acc+=Date.now()-s.run; s.run=null; }
+  else {
+    pauseAllTimers();                                  // one countdown at a time
+    if(tmProg(s)>=goal) s.base=s.acc;                  // finished before: start a fresh round
+    s.run=Date.now();
+    if(typeof askNotify==="function") askNotify();
+  }
+  saveTm(); updateTaskTimers(); updateWakeLock();
+}
+function completeTask(k,id,at){const d=hist[k]||(hist[k]={}); if(!d[id]){d[id]=hhmm(at); store.set("elsen_hist",hist)}}
+function timerDone(t){
+  chime(); try{navigator.vibrate&&navigator.vibrate([300,150,300])}catch(e){}
+  const msg=`${t.name} · ${t.min} минут дууслаа ✓`;
+  toast("⏳ "+msg);
+  if(typeof notify==="function") notify("Хугацаа дууслаа",msg,"timer-"+t.id);
+}
+function checkTimers(){
+  let changed=false;
+  for(const k in tm)for(const id in tm[k]){
+    const s=tm[k][id]; if(!s.run) continue;
+    const t=cfg.tasks.find(x=>x.id===id);
+    if(!t||!t.min){s.acc+=Date.now()-s.run; s.run=null; changed=true; continue}
+    const goal=t.min*60000, left=goal-tmProg(s);
+    if(left<=0){
+      const end=new Date(Date.now()+left);              // when it actually ran out (app may have been asleep)
+      s.acc+=end.getTime()-s.run; s.run=null; changed=true;
+      completeTask(k,id,end); timerDone(t);
+    }
+  }
+  if(changed){saveTm(); renderTasks(); renderWeek(); updateWakeLock()}
+  else updateTaskTimers();
+}
+function updateTaskTimers(){
+  const k=dayKey(new Date()), done=hist[k]||{};
+  document.querySelectorAll("#tasks .task").forEach(el=>{
+    const t=cfg.tasks.find(x=>x.id===el.dataset.id); if(!t) return;
+    const s=(tm[k]||{})[t.id], goal=t.min*60000, p=s?tmProg(s):0, running=!!(s&&s.run);
+    el.classList.toggle("running",running);
+    const tp=el.querySelector(".tp");
+    tp.hidden=!(t.min>0&&!done[t.id]&&(running||(p>0&&p<goal)));
+    tp.firstChild.style.width=Math.min(100,goal?p/goal*100:0)+"%";
+    const b=el.querySelector(".tbtn");
+    if(b){
+      const partial=p>0&&p<goal;
+      b.textContent=running?`⏸ ${fmtLeft(goal-p)}`:partial?`▶ ${fmtLeft(goal-p)}`:`▶ ${t.min}м`;
+      b.setAttribute("aria-label",(running?"Таймер зогсоох: ":"Таймер эхлүүлэх: ")+t.name);
+    }
+    const tmEl=el.querySelector(".tm");
+    tmEl.textContent=done[t.id]||""; tmEl.className="tm";
+    if(typeof reminderLabel==="function") reminderLabel(t,done,tmEl);
+  });
+}
+
+/* ---------- sound + keep screen on while timing ---------- */
+let actx=null;
+function unlockAudio(){try{actx=actx||new (window.AudioContext||window.webkitAudioContext)(); if(actx.state==="suspended")actx.resume()}catch(e){}}
+function chime(){
+  if(!actx) return;
+  try{const t0=actx.currentTime;
+    [0,.35,.7].forEach((d,i)=>{const o=actx.createOscillator(),g=actx.createGain();o.type="sine";o.frequency.value=i===2?1046.5:784;
+      g.gain.setValueAtTime(.0001,t0+d);g.gain.exponentialRampToValueAtTime(.3,t0+d+.02);g.gain.exponentialRampToValueAtTime(.0001,t0+d+.32);
+      o.connect(g).connect(actx.destination);o.start(t0+d);o.stop(t0+d+.34)});
+  }catch(e){}
+}
+let wakeLock=null;
+async function updateWakeLock(){
+  const need=(anyTimerRunning()||!!sw.run)&&document.visibilityState==="visible";
+  try{
+    if(need&&!wakeLock&&navigator.wakeLock){wakeLock=await navigator.wakeLock.request("screen");wakeLock.addEventListener("release",()=>{wakeLock=null})}
+    else if(!need&&wakeLock){const w=wakeLock;wakeLock=null;await w.release()}
+  }catch(e){}
+}
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")tick(); updateWakeLock()});
 function renderWeek(){
   const w=$("week"); w.innerHTML="";
   const now=new Date(), base=new Date(now.getTime()-toMin(cfg.dayStart)*60000);
@@ -445,6 +565,8 @@ function renderWeek(){
 /* ---------- tick ---------- */
 let lastKey=dayKey(new Date());
 function tick(){
+  checkTimers();
+  if(typeof checkReminders==="function") checkReminders();
   const n=new Date();
   const m=n.getHours()*60+n.getMinutes()+n.getSeconds()/60;
   const ds=toMin(cfg.dayStart);
@@ -477,19 +599,28 @@ function openSettings(){
 function renderEdit(){
   const l=$("editList"); l.innerHTML="";
   draft.forEach((t,i)=>{
+    const wrap=document.createElement("div");wrap.className="editbox";
     const r=document.createElement("div");r.className="edit";
-    const inp=document.createElement("input");inp.type="text";inp.value=t.name;inp.oninput=e=>t.name=e.target.value;
-    const b=document.createElement("button");b.className="del";b.textContent="×";b.onclick=()=>{draft.splice(i,1);renderEdit()};
-    r.append(inp,b);l.appendChild(r);
+    const inp=document.createElement("input");inp.type="text";inp.className="nm";inp.value=t.name;inp.placeholder="Жишээ нь: Ном унших";inp.oninput=e=>t.name=e.target.value;
+    const b=document.createElement("button");b.className="del";b.textContent="×";b.setAttribute("aria-label","Устгах");b.onclick=()=>{draft.splice(i,1);renderEdit()};
+    r.append(inp,b);
+    const o=document.createElement("div");o.className="opts";
+    const lm=document.createElement("label");lm.innerHTML=`<span>⏱ Таймер</span>`;
+    const mi=document.createElement("input");mi.type="number";mi.min="0";mi.max="600";mi.inputMode="numeric";mi.placeholder="—";mi.value=t.min||"";
+    mi.oninput=e=>t.min=Math.max(0,Math.min(600,parseInt(e.target.value,10)||0));
+    const mu=document.createElement("span");mu.textContent="мин";
+    lm.append(mi,mu); o.appendChild(lm);
+    if(typeof remEditor==="function") o.appendChild(remEditor(t));
+    wrap.append(r,o); l.appendChild(wrap);
   });
 }
 $("openSet").onclick=openSettings;
 $("close").onclick=()=>$("sheet").classList.remove("on");
 $("sheet").onclick=e=>{if(e.target.id==="sheet")$("sheet").classList.remove("on")};
-$("addTask").onclick=()=>{draft.push({id:"t"+Date.now(),name:""});renderEdit();const ins=$("editList").querySelectorAll("input");ins[ins.length-1].focus()};
+$("addTask").onclick=()=>{draft.push({id:"t"+Date.now(),name:"",min:0,rem:""});renderEdit();const ins=$("editList").querySelectorAll("input.nm");ins[ins.length-1].focus()};
 $("save").onclick=()=>{
   ["dayStart","sleepS","sleepE","workS","workE"].forEach(id=>{if($(id).value)cfg[id]=$(id).value});
-  cfg.tasks=draft.filter(t=>t.name.trim()).map(t=>({id:t.id,name:t.name.trim()}));
+  cfg.tasks=draft.filter(t=>t.name.trim()).map(t=>({id:t.id,name:t.name.trim(),min:t.min||0,rem:t.rem||""}));
   store.set("elsen_cfg",cfg); lastKey=dayKey(new Date());
   $("sheet").classList.remove("on"); drawBar(); renderTasks(); renderWeek(); tick();
 };
@@ -552,6 +683,25 @@ $("swLap").onclick=()=>{
   else {sw.acc=0; sw.laps=[];}
   swSave(); swRender();
 };
+
+// Stopwatch can be attributed to one of the daily tasks: its time counts toward that task's timer and stats.
+function swRenderFor(){
+  if(sw.task&&!cfg.tasks.some(t=>t.id===sw.task)) sw.task="";
+  const f=$("swFor"); f.innerHTML="";
+  [{id:"",name:"Ерөнхий"},...cfg.tasks].forEach(t=>{
+    const c=document.createElement("button"); c.className="chip"+((sw.task||"")===t.id?" on":"");
+    c.textContent=t.name; c.disabled=!!sw.run&&(sw.task||"")!==t.id;
+    c.onclick=()=>{if(sw.run)return; sw.task=t.id; swSave(); swRender()};
+    f.appendChild(c);
+  });
+  $("swLabel").textContent=sw.task?"Хугацаа энэ зүйлд бүртгэгдэнэ":"Секундомер · аль зүйлд зарцуулахаа сонгож болно";
+}
+function swCredit(ms){
+  const t=sw.task&&cfg.tasks.find(x=>x.id===sw.task); if(!t||ms<=0) return;
+  const k=dayKey(new Date()), s=tmGet(k,t.id); s.acc+=ms;
+  if(t.min>0&&!s.run&&tmProg(s)>=t.min*60000&&!(hist[k]||{})[t.id]){completeTask(k,t.id,new Date()); toast(`${t.name} биеллээ ✓`)}
+  saveTm(); renderTasks(); renderWeek();
+}
 
 /* ---------- food + fitness ---------- */
 const QUICK=["Үхрийн мах","Хонины мах","Тахианы мах","Загас","Өндөг","Сүү","Тараг","Ааруул","Будаа","Гурил","Гоймон","Овъёос","Төмс","Лууван","Байцаа","Сонгино","Буурцаг","Алим","Банана","Талх"];
