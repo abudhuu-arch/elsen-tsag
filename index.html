@@ -1321,7 +1321,8 @@ let startView="v-day"; try{startView=sessionStorage.getItem("elsen_view")||"v-da
 try{const q=new URLSearchParams(location.search).get("v"); if(q&&$(q)&&$(q).classList.contains("view")){startView=q; history.replaceState(null,"",location.pathname)}}catch(e){}
 
 drawBar(); renderTasks(); renderWeek(); tick();
-setInterval(tick,1000);
+// Tick right after each whole second so the clock and countdowns change in step with real time.
+(function loop(){setTimeout(()=>{tick(); loop()},1000-Date.now()%1000+15)})();
 showView(startView);
 </script>
 </body>

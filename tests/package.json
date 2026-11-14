@@ -1,0 +1,13 @@
+{
+  "name": "elsen-tsag-tests",
+  "private": true,
+  "type": "module",
+  "description": "Browser tests for Элсэн цаг. The app itself has no dependencies; these are dev-only.",
+  "scripts": {
+    "test": "node --test app.test.mjs",
+    "setup": "npx playwright-core install chromium"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.65.1"
+  }
+}
