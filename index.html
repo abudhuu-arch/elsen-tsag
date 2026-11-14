@@ -47,6 +47,9 @@ h1{font-family:"Cormorant Garamond",serif;font-weight:700;font-size:30px;letter-
 
 .bar{position:relative;height:16px;border-radius:8px;overflow:hidden;background:var(--free);margin-top:18px;border:1px solid var(--line)}
 .seg{position:absolute;top:0;bottom:0}
+.legend i.lgdot{background:var(--ink);opacity:.75;border-radius:50%;width:7px;height:7px}
+.legend [hidden]{display:none}
+.rmk{position:absolute;top:50%;width:6px;height:6px;margin-top:-3px;border-radius:50%;background:var(--ink);opacity:.75;box-shadow:0 0 0 1.5px rgba(15,13,11,.6)}
 .marker{position:absolute;top:-4px;bottom:-4px;width:3px;background:var(--sand3);box-shadow:0 0 8px var(--sand);border-radius:2px}
 .ticks{display:flex;justify-content:space-between;font-size:10px;color:var(--dim);margin-top:4px}
 .legend{display:flex;gap:14px;font-size:11px;color:var(--mute);margin-top:6px}
@@ -309,6 +312,7 @@ body.noscroll{overflow:hidden}
     <span><i style="background:var(--sleep)"></i>Унтах</span>
     <span><i style="background:var(--work)"></i>Ажил</span>
     <span><i style="background:var(--free)"></i>Чөлөөт</span>
+    <span id="lgRem" hidden><i class="lgdot"></i>Сануулга</span>
   </div>
 
   <section>
@@ -536,6 +540,10 @@ function drawBar(){
       start=i;cur=b;
     }
   }
+  // reminder times as small dots on the day line
+  $("lgRem").hidden=!cfg.tasks.some(t=>t.rem);
+  cfg.tasks.forEach(t=>{if(!t.rem)return; const r=document.createElement("div"); r.className="rmk";
+    r.style.left=`calc(${((toMin(t.rem)-ds)%1440+1440)%1440/1440*100}% - 3px)`; r.title=`⏰ ${t.rem} · ${t.name}`; bar.appendChild(r)});
   const mk=document.createElement("div");mk.className="marker";mk.id="marker";bar.appendChild(mk);
   const t=$("ticks");t.innerHTML="";
   for(let i=0;i<=4;i++){const m=(ds+i*360)%1440;const sp=document.createElement("span");sp.textContent=`${pad(Math.floor(m/60))}:${pad(m%60)}`;t.appendChild(sp)}
@@ -571,7 +579,7 @@ function renderTasks(){
     el.onclick=()=>{
       const d=todayDone();
       if(d[t.id]) delete d[t.id];
-      else { d[t.id]=hhmm(new Date()); const s=(tm[k]||{})[t.id]; if(s&&s.run){s.acc+=Date.now()-s.run;s.run=null;saveTm();updateWakeLock()} }
+      else { buzz(15); d[t.id]=hhmm(new Date()); const s=(tm[k]||{})[t.id]; if(s&&s.run){s.acc+=Date.now()-s.run;s.run=null;saveTm();updateWakeLock()} }
       store.set("elsen_hist",hist); renderTasks(); renderWeek();
       const again=$("tasks").querySelector(`[data-id="${t.id}"]`); if(again&&document.activeElement===document.body) again.focus({preventScroll:true});
     };
