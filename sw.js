@@ -1,5 +1,5 @@
 /* Элсэн цаг — service worker: works offline by caching every file the app needs. */
-const VERSION = "elsen-v3";
+const VERSION = "elsen-v4";
 const SHELL = [
   "./",
   "./index.html",
@@ -11,6 +11,7 @@ const SHELL = [
   "./icons/icon-maskable-512.png",
   "./icons/apple-touch-icon.png",
   "./icons/favicon-32.png",
+  "./icons/badge-96.png",
   "./fonts/fonts.css",
   "./fonts/cormorant-garamond-cyrillic-ext.woff2",
   "./fonts/cormorant-garamond-cyrillic.woff2",

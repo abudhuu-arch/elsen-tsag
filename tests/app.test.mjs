@@ -31,7 +31,7 @@ after(async () => { await browser?.close(); server?.close(); });
 
 // A fresh phone-sized page with empty storage; fails the test on any page error.
 async function open(t, seed, opts = {}) {
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, permissions: ['notifications'], acceptDownloads: true });
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, permissions: ['notifications'], acceptDownloads: true, ...(opts.mobile ? { isMobile: true, hasTouch: true, deviceScaleFactor: 3 } : {}) });
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
@@ -206,4 +206,46 @@ test('works offline after the first visit (service worker)', async t => {
   assert.equal(await page.locator('#tasks .task').count(), 6);
   assert.ok(await page.evaluate(() => document.fonts.check('16px Manrope', 'Өдөр')));
   await ctx.setOffline(false);
+});
+
+test('phone: back button, settings scroll lock, reminder clear, keyboard, 16px fields', async t => {
+  const { page } = await open(t, null, { mobile: true });
+  const view = () => page.evaluate(() => document.querySelector('.view.on').id);
+  const sheetOn = () => page.evaluate(() => document.getElementById('sheet').classList.contains('on'));
+  // Android back: another tab → Day; Day → (would leave the app)
+  await page.tap('nav.tabs button[data-v="v-stat"]');
+  await page.tap('nav.tabs button[data-v="v-sw"]');
+  assert.equal(await view(), 'v-sw');
+  await page.goBack({ waitUntil: 'commit' }); await page.waitForFunction(() => document.getElementById('v-day').classList.contains('on'));
+  // tapping Day in the bar after another tab leaves no extra history entry behind
+  await page.tap('nav.tabs button[data-v="v-food"]'); await page.tap('nav.tabs button[data-v="v-day"]');
+  assert.equal(await page.evaluate(() => history.state), null);
+  // Settings: page behind it is pinned at its scroll position, back closes it and restores the scroll
+  await page.evaluate(() => window.scrollTo(0, 300)); const y = await page.evaluate(() => scrollY);
+  await page.evaluate(() => document.getElementById('openSet').click()); assert.ok(await sheetOn());  // tap() would scroll to the button first
+  assert.equal(await page.evaluate(() => getComputedStyle(document.body).position), 'fixed');
+  await page.goBack({ waitUntil: 'commit' }); await page.waitForFunction(() => !document.getElementById('sheet').classList.contains('on'));
+  assert.equal(await page.evaluate(() => scrollY), y);
+  assert.equal(await view(), 'v-day');
+  // Closing with the button also removes the history entry it added
+  await page.tap('#openSet'); await page.tap('#close');
+  await page.waitForFunction(() => !(history.state && history.state.sheet));
+  // Fields are 16px so iPhone does not zoom in; reminder can be cleared
+  await page.tap('#openSet');
+  assert.equal(await page.$eval('.editbox input.nm', e => getComputedStyle(e).fontSize), '16px');
+  const rem = page.locator('.editbox').first().locator('input[type=time]');
+  await rem.fill('09:30');
+  const clr = page.locator('.editbox').first().locator('.remclr');
+  assert.ok(await clr.isVisible());
+  await clr.tap();
+  assert.equal(await page.evaluate(() => draft[0].rem), '');
+  assert.ok(!(await clr.isVisible()));
+  // Keyboard up → tab bar hidden
+  await page.locator('.editbox input.nm').first().focus();
+  assert.ok(await page.evaluate(() => document.body.classList.contains('typing')));
+  await page.locator('.editbox input.nm').first().blur();
+  await page.waitForFunction(() => !document.body.classList.contains('typing'));
+  // iPhone launch screens exist for every <link> declared
+  for (const href of await page.$$eval('link[rel=apple-touch-startup-image]', ls => ls.map(l => l.getAttribute('href'))))
+    assert.ok(fs.existsSync(path.join(ROOT, href)), href);
 });

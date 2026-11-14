@@ -6,6 +6,8 @@
 <title>Элсэн цаг</title>
 <meta name="description" content="Өдрийн элс урсахыг харж, заавал хийх зүйлсээ биелүүл.">
 <meta name="theme-color" content="#0f0d0b">
+<meta name="color-scheme" content="dark">
+<meta name="format-detection" content="telephone=no">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
@@ -14,6 +16,18 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Элсэн цаг">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<!-- iPhone launch screens (otherwise a white flash on opening) -->
+<link rel="apple-touch-startup-image" href="splash/splash-1320x2868.png" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+<link rel="apple-touch-startup-image" href="splash/splash-1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+<link rel="apple-touch-startup-image" href="splash/splash-1284x2778.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+<link rel="apple-touch-startup-image" href="splash/splash-1260x2736.png" media="(device-width: 420px) and (device-height: 912px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+<link rel="apple-touch-startup-image" href="splash/splash-1242x2688.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+<link rel="apple-touch-startup-image" href="splash/splash-1206x2622.png" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+<link rel="apple-touch-startup-image" href="splash/splash-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+<link rel="apple-touch-startup-image" href="splash/splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+<link rel="apple-touch-startup-image" href="splash/splash-1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+<link rel="apple-touch-startup-image" href="splash/splash-828x1792.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+<link rel="apple-touch-startup-image" href="splash/splash-750x1334.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
 <link rel="preload" href="fonts/manrope-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/cormorant-garamond-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="fonts/fonts.css">
@@ -121,7 +135,7 @@ input[type=time]{color-scheme:dark}
 .sub{font-size:12px;color:var(--dim);margin:16px 0 8px;text-transform:uppercase;letter-spacing:.8px}
 /* views + nav */
 .view{display:none}.view.on{display:block}
-.wrap{padding-bottom:100px}
+.wrap{padding-bottom:calc(100px + env(safe-area-inset-bottom))}
 nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:5;display:flex;justify-content:center;background:rgba(15,13,11,.94);backdrop-filter:blur(10px);border-top:1px solid var(--line);padding:8px 8px calc(8px + env(safe-area-inset-bottom))}
 nav.tabs .in{display:flex;width:100%;max-width:460px;gap:6px}
 nav.tabs button{flex:1;background:none;border:0;color:var(--dim);font:inherit;font-size:11px;font-weight:600;padding:6px 0;border-radius:10px;cursor:pointer}
@@ -246,6 +260,27 @@ select{background:var(--card);border:1px solid var(--line);color:var(--ink);bord
 .switch input:checked+i::after{left:21px;background:var(--sand3)}
 .switch input:focus-visible+i{outline:2px solid var(--sand3);outline-offset:2px}
 body.noscroll{overflow:hidden}
+/* ---------- phones (Android + iPhone) ---------- */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;overscroll-behavior-y:none}
+body{min-height:100dvh;overscroll-behavior-y:none}
+/* iPhone: a body that is merely overflow:hidden still scrolls behind the sheet, so pin it */
+body.noscroll{position:fixed;left:0;right:0;width:100%}
+.panel{max-height:88dvh;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding-bottom:calc(30px + env(safe-area-inset-bottom))}
+.wrap{padding-left:max(18px,env(safe-area-inset-left));padding-right:max(18px,env(safe-area-inset-right))}
+/* no double-tap zoom / 300ms delay on controls; no long-press text selection or callout */
+button,.task,.chip,.day,.cal button,nav.tabs,label.switch{touch-action:manipulation;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+/* iPhone: empty time fields collapse to nothing and the value hugs the right edge */
+input[type=time]{min-width:92px;min-height:38px;-webkit-appearance:none;appearance:none;text-align:left}
+input[type=time]::-webkit-date-and-time-value{text-align:left}
+.remclr{flex:none;width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:none;color:var(--mute);font-size:16px;cursor:pointer}
+@media (pointer:coarse){
+  /* iPhone zooms the whole page into any field with text smaller than 16px */
+  input,select,textarea{font-size:16px!important}
+  .mv button{width:40px;height:40px}
+  .treset{width:40px;height:40px}
+  /* keyboard up: the fixed tab bar would sit on top of the keyboard and hide the field */
+  body.typing nav.tabs{display:none}
+}
 :focus{outline:none}
 :focus-visible{outline:2px solid var(--sand3);outline-offset:2px;border-radius:6px}
 .task:focus-visible{outline-offset:-1px;border-radius:14px}
@@ -677,9 +712,22 @@ function updateTaskTimers(){
 /* ---------- sound + keep screen on while timing ---------- */
 let actx=null;
 function unlockAudio(){try{actx=actx||new (window.AudioContext||window.webkitAudioContext)(); if(actx.state==="suspended")actx.resume()}catch(e){}}
-function buzz(p){if(cfg.sound===false)return; try{navigator.vibrate&&navigator.vibrate(p)}catch(e){}}
+let hapEl=null;
+function buzz(p){
+  if(cfg.sound===false) return;
+  try{
+    if(navigator.vibrate){navigator.vibrate(p); return}
+    // iPhone has no vibrate(); toggling a hidden <input switch> gives a light system haptic (iOS 18+).
+    if(!/iphone|ipod/i.test(navigator.userAgent)) return;
+    if(!hapEl){hapEl=document.createElement("label"); hapEl.setAttribute("aria-hidden","true");
+      hapEl.style.cssText="position:fixed;left:-100px;top:0;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none";
+      hapEl.innerHTML='<input type="checkbox" switch tabindex="-1">'; hapEl.onclick=e=>e.stopPropagation(); document.body.appendChild(hapEl)}
+    hapEl.click();
+  }catch(e){}
+}
 function chime(){
   if(!actx||cfg.sound===false) return;
+  try{if(actx.state!=="running") actx.resume()}catch(e){}
   try{const t0=actx.currentTime;
     [0,.35,.7].forEach((d,i)=>{const o=actx.createOscillator(),g=actx.createGain();o.type="sine";o.frequency.value=i===2?1046.5:784;
       g.gain.setValueAtTime(.0001,t0+d);g.gain.exponentialRampToValueAtTime(.3,t0+d+.02);g.gain.exponentialRampToValueAtTime(.0001,t0+d+.32);
@@ -695,6 +743,13 @@ async function updateWakeLock(){
   }catch(e){}
 }
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")tick(); updateWakeLock()});
+// iPhone/Android restore the page from memory without reloading it: catch up at once.
+addEventListener("pageshow",e=>{if(e.persisted)tick()});
+addEventListener("focus",()=>tick());
+// Keyboard open on a phone → hide the bottom tab bar so it doesn't cover the field.
+const KB_INPUT=el=>el&&(el.tagName==="TEXTAREA"||(el.tagName==="INPUT"&&/^(text|number|search|email|url|tel)$/.test(el.type)));
+document.addEventListener("focusin",e=>{if(KB_INPUT(e.target))document.body.classList.add("typing")});
+document.addEventListener("focusout",()=>setTimeout(()=>{if(!KB_INPUT(document.activeElement))document.body.classList.remove("typing")},50));
 function renderWeek(){
   const w=$("week"); w.innerHTML="";
   const now=new Date(), base=new Date(now.getTime()-toMin(cfg.dayStart)*60000);
@@ -706,7 +761,7 @@ function renderWeek(){
     el.className="day"+(c===tot&&tot?" full":c?" part":"")+(i===0?" today":"");
     el.innerHTML=`<div class="d">${WD[d.getDay()]}</div><div class="dot">${c===tot&&tot?"✓":c||""}</div>`;
     el.setAttribute("aria-label",`${WD_FULL[d.getDay()]}: ${c}/${tot}. Дэлгэрэнгүй`);
-    el.onclick=()=>{statY=d.getFullYear(); statM=d.getMonth(); statSel=k; showView("v-stat")};  // open that day in Stats
+    el.onclick=()=>{statY=d.getFullYear(); statM=d.getMonth(); statSel=k; goView("v-stat")};  // open that day in Stats
     w.appendChild(el);
   }
   // streak: count full days backwards; today counts if full, otherwise start from yesterday
@@ -756,11 +811,23 @@ let draft=[];
 function openSettings(){
   ["dayStart","sleepS","sleepE","workS","workE"].forEach(id=>$(id).value=cfg[id]);
   $("soundOn").checked=cfg.sound!==false;
-  draft=cfg.tasks.map(t=>({...t})); renderEdit(); $("sheet").classList.add("on");
-  document.body.classList.add("noscroll"); $("sheet").querySelector(".panel").scrollTop=0;
+  draft=cfg.tasks.map(t=>({...t})); renderEdit();
+  if(!$("sheet").classList.contains("on")){
+    sheetY=window.scrollY; document.body.style.top=-sheetY+"px";
+    $("sheet").classList.add("on"); document.body.classList.add("noscroll");
+    histPush({...(history.state||{}),sheet:1});
+  }
+  $("sheet").querySelector(".panel").scrollTop=0;
   setTimeout(()=>$("sheetTitle").focus({preventScroll:true}),0);
 }
-function closeSettings(){$("sheet").classList.remove("on"); document.body.classList.remove("noscroll"); $("openSet").focus({preventScroll:true})}
+let sheetY=0;
+function closeSheetUI(){
+  if(!$("sheet").classList.contains("on")) return;
+  if(document.activeElement&&document.activeElement.blur) document.activeElement.blur();
+  $("sheet").classList.remove("on"); document.body.classList.remove("noscroll"); document.body.style.top="";
+  window.scrollTo(0,sheetY); $("openSet").focus({preventScroll:true});
+}
+function closeSettings(){closeSheetUI(); if(history.state&&history.state.sheet) histBack()}
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&$("sheet").classList.contains("on"))closeSettings()});
 function renderEdit(){
   const l=$("editList"); l.innerHTML="";
@@ -802,6 +869,27 @@ $("save").onclick=()=>{
 };
 
 /* ---------- views (bottom nav) ---------- */
+/* Android back button / iOS edge swipe: Settings → closes, other tab → Day, Day → leaves the app.
+   Skipped inside an iframe (claude.ai) so the host page's history is left alone. */
+const useHist=(()=>{try{return window.top===window&&!!history.pushState}catch(e){return false}})();
+let ignorePop=0;
+try{if(useHist)history.scrollRestoration="manual"}catch(e){}   // we restore scroll ourselves
+function histPush(st){if(useHist)try{history.pushState(st,"")}catch(e){}}
+function histBack(){if(useHist){ignorePop++; history.back()}}
+addEventListener("popstate",e=>{
+  if(ignorePop){ignorePop--; return}
+  const st=e.state||{};
+  if(!st.sheet) closeSheetUI();
+  const v=st.view||"v-day";
+  if(!$(v).classList.contains("on")) showView(v,true);
+});
+function goView(v){
+  const cur=(history.state||{}).view;
+  if(!useHist||v===((document.querySelector(".view.on")||{}).id)){showView(v);return}
+  if(v==="v-day"){ if(cur){showView(v); histBack()} else showView(v) }
+  else if(cur){ try{history.replaceState({view:v},"")}catch(e){} showView(v) }
+  else { histPush({view:v}); showView(v) }
+}
 function showView(v){
   if(!$(v)) v="v-day";
   document.querySelectorAll(".view").forEach(e=>e.classList.toggle("on",e.id===v));
@@ -811,7 +899,7 @@ function showView(v){
   if(v==="v-sw") swRender();
   if(v==="v-stat" && typeof renderStats==="function") renderStats();
 }
-document.querySelectorAll("nav.tabs button").forEach(b=>b.onclick=()=>showView(b.dataset.v));
+document.querySelectorAll("nav.tabs button").forEach(b=>b.onclick=()=>goView(b.dataset.v));
 
 /* ---------- stopwatch ---------- */
 let sw=Object.assign({acc:0,run:null,laps:[]},store.get("elsen_sw",{}));
@@ -868,7 +956,9 @@ const sinceStart=min=>((min-toMin(cfg.dayStart))%1440+1440)%1440;   // minutes a
 const nowSince=()=>{const n=new Date();return sinceStart(n.getHours()*60+n.getMinutes())};
 async function notify(title,body,tag){
   if(!hasNotif||Notification.permission!=="granted") return false;
-  const opt={body,tag,renotify:!!tag,icon:"icons/icon-192.png",badge:"icons/favicon-32.png",lang:"mn"};
+  // badge: Android draws it as a one-colour silhouette in the status bar, so it must be white-on-transparent
+  const opt={body,tag,renotify:!!tag,icon:"icons/icon-192.png",badge:"icons/badge-96.png",lang:"mn",
+    silent:cfg.sound===false, ...(cfg.sound===false?{}:{vibrate:[200,100,200]})};
   try{const reg=navigator.serviceWorker&&await navigator.serviceWorker.getRegistration(); if(reg){await reg.showNotification(title,opt); return true}}catch(e){}
   try{new Notification(title,opt); return true}catch(e){return false}
 }
@@ -892,8 +982,14 @@ $("notifBtn").onclick=()=>askNotify(true);
 $("notifTest").onclick=async()=>{unlockAudio(); chime(); if(!await notify("Элсэн цаг","Сануулга ингэж харагдана ⏳","test")) toast("Мэдэгдэл илгээж чадсангүй")};
 function remEditor(t){
   const l=document.createElement("label"); l.innerHTML=`<span>⏰ Сануулга</span>`;
-  const i=document.createElement("input"); i.type="time"; i.value=t.rem||""; i.oninput=e=>t.rem=e.target.value;
-  l.appendChild(i); return l;
+  const i=document.createElement("input"); i.type="time"; i.value=t.rem||"";
+  i.setAttribute("aria-label","Сануулгын цаг: "+(t.name||"зүйл"));
+  // iPhone's time picker has no way to clear a value, so offer one.
+  const x=document.createElement("button"); x.type="button"; x.className="remclr"; x.textContent="×"; x.setAttribute("aria-label","Сануулга арилгах");
+  const sync=()=>{x.hidden=!i.value};
+  i.oninput=i.onchange=e=>{t.rem=e.target.value; sync()};
+  x.onclick=e=>{e.preventDefault(); i.value=""; t.rem=""; sync(); i.focus()};
+  sync(); l.append(i,x); return l;
 }
 function reminderLabel(t,done,el){
   if(!t.rem||done[t.id]) return;
@@ -1261,13 +1357,19 @@ function toast(msg,btn,fn,ms){
 /* ---------- PWA: offline + install ---------- */
 const isStandalone=()=>matchMedia("(display-mode: standalone)").matches||navigator.standalone===true;
 const isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
+const isAndroid=/android/i.test(navigator.userAgent);
+// Links shared in Messenger/Facebook/Instagram open in their own browser, which can't install apps or keep data well.
+const inAppBrowser=/FBAN|FBAV|FB_IAB|Instagram|Messenger|Line\/|KAKAOTALK|; wv\)/i.test(navigator.userAgent);
 let installEvt=null;
 function renderInstall(){
   if(isStandalone()){$("appSec").hidden=true;return}
   $("appSec").hidden=false;
   $("installBtn").hidden=!installEvt;
-  $("installNote").textContent=installEvt?"Суулгавал апп шиг нээгдэж, интернэтгүй үед ч ажиллана."
-    :isIOS?"iPhone дээр суулгах: Safari-н доод талын «Хуваалцах» (⬆) → «Нүүр дэлгэцэнд нэмэх»."
+  $("installNote").textContent=inAppBrowser
+    ?"Та Facebook/Messenger/Instagram доторх хөтчөөр нээсэн байна. Эндээс суулгах боломжгүй: «⋯» цэснээс "+(isIOS?"«Safari-д нээх»":"«Chrome-д нээх» / «Браузерт нээх»")+"-ийг сонгоод тэндээс суулгана уу."
+    :installEvt?"Суулгавал апп шиг нээгдэж, интернэтгүй үед ч ажиллана."
+    :isIOS?"iPhone дээр суулгах: Safari-н доод талын «Хуваалцах» (⬆) → «Нүүр дэлгэцэнд нэмэх» → «Нэмэх». Суулгаагүй үед Safari 7 хоног нээгээгүй сайтын өгөгдлийг устгаж болзошгүй тул заавал суулгаарай."
+    :isAndroid?"Android дээр суулгах: Chrome-н баруун дээд «⋮» цэс → «Нүүр дэлгэцэнд нэмэх» эсвэл «Апп суулгах»."
     :"Браузерын цэснээс «Апп суулгах» эсвэл «Нүүр дэлгэцэнд нэмэх»-ийг сонгоно уу.";
 }
 addEventListener("beforeinstallprompt",e=>{e.preventDefault();installEvt=e;renderInstall()});
@@ -1375,6 +1477,13 @@ try{const q=new URLSearchParams(location.search).get("v"); if(q&&$(q)&&$(q).clas
 drawBar(); renderTasks(); renderWeek(); tick();
 // Tick right after each whole second so the clock and countdowns change in step with real time.
 (function loop(){setTimeout(()=>{tick(); loop()},1000-Date.now()%1000+15)})();
+// Restore the tab after a reload / open a shortcut, keeping Day underneath it for the back button.
+try{
+  const st=history.state||{};
+  if(st.sheet) history.replaceState(st.view?{view:st.view}:null,"");
+  if(useHist&&startView!=="v-day"&&st.view!==startView){history.replaceState(null,""); history.pushState({view:startView},"")}
+  if(useHist&&startView==="v-day"&&st.view) history.replaceState(null,"");
+}catch(e){}
 showView(startView);
 </script>
 </body>
