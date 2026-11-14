@@ -2,8 +2,18 @@
 <html lang="mn">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Элсэн цаг</title>
+<meta name="description" content="Өдрийн элс урсахыг харж, заавал хийх зүйлсээ биелүүл.">
+<meta name="theme-color" content="#0f0d0b">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Элсэн цаг">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -144,6 +154,15 @@ select{background:var(--card);border:1px solid var(--line);color:var(--ink);bord
 .status{font-size:13px;color:var(--mute);text-align:center;margin:10px 0}
 .tip{font-size:14px;line-height:1.5;padding:6px 0;color:var(--mute)}
 .tip::before{content:"• ";color:var(--sand)}
+.wrap{padding-top:calc(20px + env(safe-area-inset-top))}
+.note{font-size:13px;line-height:1.5;color:var(--mute);background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:6px}
+.note:empty{display:none}
+.toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translate(-50%,20px);opacity:0;pointer-events:none;z-index:20;
+  width:calc(100% - 32px);max-width:428px;display:flex;align-items:center;gap:10px;background:#2a2219;border:1px solid var(--sand2);color:var(--sand3);
+  border-radius:14px;padding:12px 14px;font-size:14px;box-shadow:0 10px 30px rgba(0,0,0,.5);transition:.25s}
+.toast.on{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.toast span{flex:1}
+.toast button{background:var(--sand);color:#2a1d0c;border:0;border-radius:10px;padding:8px 12px;font:inherit;font-weight:700;font-size:13px;cursor:pointer}
 .quote{text-align:center;font-family:"Cormorant Garamond",serif;font-style:italic;font-size:17px;color:var(--mute);margin-top:30px}
 </style>
 </head>
@@ -288,10 +307,17 @@ select{background:var(--card);border:1px solid var(--line);color:var(--ink);bord
     <div class="sub">Заавал хийх зүйлс</div>
     <div id="editList"></div>
     <button class="btn" id="addTask">+ Нэмэх</button>
+    <div id="appSec" hidden>
+      <div class="sub">Апп</div>
+      <div class="note" id="installNote"></div>
+      <button class="btn" id="installBtn" hidden>📲 Нүүр дэлгэцэнд суулгах</button>
+    </div>
     <button class="btn primary" id="save">Хадгалах</button>
     <button class="btn" id="close">Хаах</button>
   </div>
 </div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"><span id="toastMsg"></span><button id="toastBtn" hidden></button></div>
 
 <script>
 const DEFAULT = {
@@ -715,6 +741,46 @@ function renderPlan(){
   }
 }
 renderPantry(); renderPlan();
+
+/* ---------- toast ---------- */
+let toastT=0;
+function toast(msg,btn,fn,ms){
+  $("toastMsg").textContent=msg;
+  const b=$("toastBtn"); b.hidden=!btn; b.textContent=btn||""; b.onclick=()=>{$("toast").classList.remove("on"); fn&&fn()};
+  $("toast").classList.add("on"); clearTimeout(toastT);
+  if(ms!==0) toastT=setTimeout(()=>$("toast").classList.remove("on"),ms||4500);
+}
+
+/* ---------- PWA: offline + install ---------- */
+const isStandalone=()=>matchMedia("(display-mode: standalone)").matches||navigator.standalone===true;
+const isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
+let installEvt=null;
+function renderInstall(){
+  if(isStandalone()){$("appSec").hidden=true;return}
+  $("appSec").hidden=false;
+  $("installBtn").hidden=!installEvt;
+  $("installNote").textContent=installEvt?"Суулгавал апп шиг нээгдэж, интернэтгүй үед ч ажиллана."
+    :isIOS?"iPhone дээр суулгах: Safari-н доод талын «Хуваалцах» (⬆) → «Нүүр дэлгэцэнд нэмэх»."
+    :"Браузерын цэснээс «Апп суулгах» эсвэл «Нүүр дэлгэцэнд нэмэх»-ийг сонгоно уу.";
+}
+addEventListener("beforeinstallprompt",e=>{e.preventDefault();installEvt=e;renderInstall()});
+addEventListener("appinstalled",()=>{installEvt=null;renderInstall();toast("Элсэн цаг суулгагдлаа ⏳")});
+$("installBtn").onclick=async()=>{if(!installEvt)return;installEvt.prompt();try{await installEvt.userChoice}catch(e){}installEvt=null;renderInstall()};
+renderInstall();
+
+let swReg=null, updating=false;
+if("serviceWorker" in navigator && /^https?:$/.test(location.protocol)){
+  addEventListener("load",async()=>{
+    try{
+      swReg=await navigator.serviceWorker.register("sw.js");
+      const offerUpdate=w=>toast("Шинэ хувилбар бэлэн боллоо","Шинэчлэх",()=>{updating=true;w.postMessage("SKIP_WAITING")},0);
+      if(swReg.waiting&&navigator.serviceWorker.controller) offerUpdate(swReg.waiting);
+      swReg.addEventListener("updatefound",()=>{const w=swReg.installing;
+        w&&w.addEventListener("statechange",()=>{if(w.state==="installed"&&navigator.serviceWorker.controller)offerUpdate(w)})});
+      navigator.serviceWorker.addEventListener("controllerchange",()=>{if(updating){updating=false;location.reload()}});
+    }catch(e){ /* not available here (e.g. inside claude.ai) */ }
+  });
+}
 
 let startView="v-day"; try{startView=sessionStorage.getItem("elsen_view")||"v-day"}catch(e){}
 
