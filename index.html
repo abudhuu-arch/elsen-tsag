@@ -171,6 +171,7 @@ select{background:var(--card);border:1px solid var(--line);color:var(--ink);bord
 .wrap{padding-top:calc(20px + env(safe-area-inset-top))}
 .note{font-size:13px;line-height:1.5;color:var(--mute);background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:6px}
 .note:empty{display:none}
+.btn+.note,.btn+.btn{margin-top:8px}
 .toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translate(-50%,20px);opacity:0;pointer-events:none;z-index:20;
   width:calc(100% - 32px);max-width:428px;display:flex;align-items:center;gap:10px;background:#2a2219;border:1px solid var(--sand2);color:var(--sand3);
   border-radius:14px;padding:12px 14px;font-size:14px;box-shadow:0 10px 30px rgba(0,0,0,.5);transition:.25s}
@@ -247,6 +248,7 @@ select{background:var(--card);border:1px solid var(--line);color:var(--ink);bord
     <div class="prog"><div id="prog" style="width:0"></div></div>
     <div class="alldone" id="alldone">Бүгдийг хийлээ. Өнөөдрийн элс дэмий урсаагүй.</div>
     <div id="tasks"></div>
+    <div class="small" id="remHint" style="text-align:center" hidden>⏰ Сануулга зөвхөн апп нээлттэй үед ирнэ</div>
   </section>
 
   <section>
@@ -321,6 +323,11 @@ select{background:var(--card);border:1px solid var(--line);color:var(--ink);bord
     <div class="sub">Заавал хийх зүйлс</div>
     <div id="editList"></div>
     <button class="btn" id="addTask">+ Нэмэх</button>
+    <div class="sub">Сануулга</div>
+    <div class="note" id="notifNote"></div>
+    <button class="btn" id="notifBtn" hidden>🔔 Сануулга зөвшөөрөх</button>
+    <button class="btn" id="notifTest" hidden>Туршиж үзэх</button>
+    <div class="note">ℹ️ Сануулга зөвхөн апп нээлттэй үед ажиллана. Апп хаалттай үед өнгөрсөн сануулгыг дараа нээхэд улаанаар тэмдэглэнэ. Таймер явж байхад дэлгэц унтрахгүй.</div>
     <div id="appSec" hidden>
       <div class="sub">Апп</div>
       <div class="note" id="installNote"></div>
@@ -621,7 +628,7 @@ $("addTask").onclick=()=>{draft.push({id:"t"+Date.now(),name:"",min:0,rem:""});r
 $("save").onclick=()=>{
   ["dayStart","sleepS","sleepE","workS","workE"].forEach(id=>{if($(id).value)cfg[id]=$(id).value});
   cfg.tasks=draft.filter(t=>t.name.trim()).map(t=>({id:t.id,name:t.name.trim(),min:t.min||0,rem:t.rem||""}));
-  store.set("elsen_cfg",cfg); lastKey=dayKey(new Date());
+  store.set("elsen_cfg",cfg); lastRemCheck=-1; lastKey=dayKey(new Date());
   $("sheet").classList.remove("on"); drawBar(); renderTasks(); renderWeek(); tick();
 };
 
@@ -683,6 +690,70 @@ $("swLap").onclick=()=>{
   else {sw.acc=0; sw.laps=[];}
   swSave(); swRender();
 };
+
+/* ---------- reminders (no server: they fire only while the app is open) ---------- */
+const hasNotif="Notification" in window;
+let notified=store.get("elsen_notified",{}), lastRemCheck=-1;
+const sinceStart=min=>((min-toMin(cfg.dayStart))%1440+1440)%1440;   // minutes after the day starts
+const nowSince=()=>{const n=new Date();return sinceStart(n.getHours()*60+n.getMinutes())};
+async function notify(title,body,tag){
+  if(!hasNotif||Notification.permission!=="granted") return false;
+  const opt={body,tag,renotify:!!tag,icon:"icons/icon-192.png",badge:"icons/favicon-32.png",lang:"mn"};
+  try{const reg=navigator.serviceWorker&&await navigator.serviceWorker.getRegistration(); if(reg){await reg.showNotification(title,opt); return true}}catch(e){}
+  try{new Notification(title,opt); return true}catch(e){return false}
+}
+async function askNotify(force){
+  if(!hasNotif||Notification.permission!=="default") return;
+  if(!force&&store.get("elsen_notif_asked",false)) return;
+  store.set("elsen_notif_asked",true);
+  try{await Notification.requestPermission()}catch(e){}
+  renderNotif();
+}
+function renderNotif(){
+  const n=$("notifNote"), b=$("notifBtn"), tst=$("notifTest");
+  b.hidden=true; tst.hidden=true;
+  if(!hasNotif){
+    n.textContent=isIOS&&!isStandalone()?"iPhone дээр мэдэгдэл авахын тулд эхлээд аппыг нүүр дэлгэцэнд суулгана уу (доорх заавар).":"Энэ браузер мэдэгдэл дэмжихгүй. Сануулга апп дотор гарна.";
+  } else if(Notification.permission==="granted"){ n.textContent="✓ Мэдэгдэл зөвшөөрөгдсөн."; tst.hidden=false; }
+  else if(Notification.permission==="denied"){ n.textContent="Мэдэгдэл хаагдсан байна. Утас/браузерын тохиргооноос «Элсэн цаг»-д зөвшөөрөл өгнө үү. Тэр болтол сануулга апп дотор гарна."; }
+  else { n.textContent="Таймер дуусах, сануулгын цаг болоход мэдэгдэл авахын тулд зөвшөөрнө үү."; b.hidden=false; }
+}
+$("notifBtn").onclick=()=>askNotify(true);
+$("notifTest").onclick=async()=>{unlockAudio(); chime(); if(!await notify("Элсэн цаг","Сануулга ингэж харагдана ⏳","test")) toast("Мэдэгдэл илгээж чадсангүй")};
+function remEditor(t){
+  const l=document.createElement("label"); l.innerHTML=`<span>⏰ Сануулга</span>`;
+  const i=document.createElement("input"); i.type="time"; i.value=t.rem||""; i.oninput=e=>t.rem=e.target.value;
+  l.appendChild(i); return l;
+}
+function reminderLabel(t,done,el){
+  if(!t.rem||done[t.id]) return;
+  el.textContent=`⏰ ${t.rem}`;
+  if(nowSince()>=sinceStart(toMin(t.rem))) el.classList.add("late");
+}
+function checkReminders(){
+  const ns=nowSince(); if(ns===lastRemCheck) return; lastRemCheck=ns;
+  $("remHint").hidden=!cfg.tasks.some(t=>t.rem);
+  const k=dayKey(new Date()), done=hist[k]||{};
+  if(!notified[k]) notified={[k]:{}};                 // keep only today's record
+  const sent=notified[k], due=[], missed=[];
+  cfg.tasks.forEach(t=>{
+    if(!t.rem||done[t.id]||sent[t.id]) return;
+    const rs=sinceStart(toMin(t.rem)); if(ns<rs) return;
+    sent[t.id]=1; (ns-rs<=15?due:missed).push(t);     // >15 min late = app was closed: just mark it
+  });
+  if(!due.length&&!missed.length) return;
+  store.set("elsen_notified",notified);
+  due.forEach(t=>notify("⏰ "+t.name,t.min?`${t.min} минутын таймераа эхлүүлэх цаг боллоо`:"Хийх цаг боллоо","rem-"+t.id));
+  if(due.length){
+    chime(); const t=due[0];
+    if(due.length===1&&t.min) toast(`⏰ ${t.name} · цаг боллоо`,"Эхлүүлэх",()=>timerToggle(t),15000);
+    else toast(`⏰ ${due.map(x=>x.name).join(", ")} · цаг боллоо`,null,null,15000);
+  } else toast(`${missed.length} зүйлийн сануулгын цаг өнгөрсөн байна`);
+  updateTaskTimers();
+}
+const _openSettings=openSettings;
+openSettings=function(){_openSettings(); renderNotif(); renderInstall()};
+$("openSet").onclick=openSettings;
 
 // Stopwatch can be attributed to one of the daily tasks: its time counts toward that task's timer and stats.
 function swRenderFor(){
