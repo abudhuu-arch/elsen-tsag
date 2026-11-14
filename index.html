@@ -221,6 +221,11 @@ select{background:var(--card);border:1px solid var(--line);color:var(--ink);bord
 .pt .bar2 i{display:block;height:100%;background:var(--sand);border-radius:3px}
 .pt .r2{font-size:12px;color:var(--dim);margin-top:5px}
 .empty{font-size:14px;color:var(--mute);text-align:center;padding:8px 0}
+body.noscroll{overflow:hidden}
+:focus{outline:none}
+:focus-visible{outline:2px solid var(--sand3);outline-offset:2px;border-radius:6px}
+.task:focus-visible{outline-offset:-1px;border-radius:14px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
 .quote{text-align:center;font-family:"Cormorant Garamond",serif;font-style:italic;font-size:17px;color:var(--mute);margin-top:30px}
 </style>
 </head>
@@ -374,7 +379,7 @@ select{background:var(--card);border:1px solid var(--line);color:var(--ink);bord
   </div>
 </div>
 
-<nav class="tabs"><div class="in">
+<nav class="tabs" aria-label="Цэс"><div class="in">
   <button class="on" data-v="v-day"><span>⏳</span>Өдөр</button>
   <button data-v="v-sw"><span>⏱</span>Секундомер</button>
   <button data-v="v-food"><span>🥣</span>Хоол & Фитнес</button>
@@ -382,8 +387,8 @@ select{background:var(--card);border:1px solid var(--line);color:var(--ink);bord
 </div></nav>
 
 <div class="sheet" id="sheet">
-  <div class="panel">
-    <h3>Тохиргоо</h3>
+  <div class="panel" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <h3 id="sheetTitle" tabindex="-1">Тохиргоо</h3>
     <div class="row"><label>Өдөр эхлэх цаг</label><input type="time" id="dayStart"></div>
     <div class="row"><label>Унтах</label><div class="pair"><input type="time" id="sleepS">–<input type="time" id="sleepE"></div></div>
     <div class="row"><label>Ажил</label><div class="pair"><input type="time" id="workS">–<input type="time" id="workE"></div></div>
@@ -505,6 +510,8 @@ function renderTasks(){
   cfg.tasks.forEach(t=>{
     const el=document.createElement("div");
     el.className="task"+(done[t.id]?" done":""); el.dataset.id=t.id;
+    el.tabIndex=0; el.setAttribute("role","checkbox"); el.setAttribute("aria-checked",done[t.id]?"true":"false");
+    el.onkeydown=e=>{if(e.target===el&&(e.key===" "||e.key==="Enter")){e.preventDefault();el.click()}};
     el.innerHTML=`<div class="box"></div><div class="tx"><div class="t"></div><div class="tp" hidden><i></i></div></div><div class="tm"></div>`;
     el.querySelector(".t").textContent=t.name;
     if(t.min>0&&!done[t.id]){
@@ -517,6 +524,7 @@ function renderTasks(){
       if(d[t.id]) delete d[t.id];
       else { d[t.id]=hhmm(new Date()); const s=(tm[k]||{})[t.id]; if(s&&s.run){s.acc+=Date.now()-s.run;s.run=null;saveTm();updateWakeLock()} }
       store.set("elsen_hist",hist); renderTasks(); renderWeek();
+      const again=$("tasks").querySelector(`[data-id="${t.id}"]`); if(again&&document.activeElement===document.body) again.focus({preventScroll:true});
     };
     box.appendChild(el);
   });
@@ -556,9 +564,10 @@ function timerDone(t){
   toast("⏳ "+msg);
   if(typeof notify==="function") notify("Хугацаа дууслаа",msg,"timer-"+t.id);
 }
+function dayStartTime(k){const [y,m,d]=k.split("-").map(Number);return new Date(y,m-1,d,0,toMin(cfg.dayStart))}
 function checkTimers(){
-  let changed=false;
-  for(const k in tm)for(const id in tm[k]){
+  let changed=false; const today=dayKey(new Date());
+  for(const k of Object.keys(tm))for(const id in tm[k]){
     const s=tm[k][id]; if(!s.run) continue;
     const t=cfg.tasks.find(x=>x.id===id);
     if(!t||!t.min){s.acc+=Date.now()-s.run; s.run=null; changed=true; continue}
@@ -567,6 +576,13 @@ function checkTimers(){
       const end=new Date(Date.now()+left);              // when it actually ran out (app may have been asleep)
       s.acc+=end.getTime()-s.run; s.run=null; changed=true;
       completeTask(k,id,end); timerDone(t);
+    } else if(k!==today){
+      // The day rolled over while the countdown was running: time up to the boundary stays on the
+      // old day, and the same countdown continues on today's list.
+      const cut=Math.max(s.run,dayStartTime(today).getTime()), p=tmProg(s);
+      s.acc+=cut-s.run; s.run=null;
+      const n=tmGet(today,id); n.run=cut; n.base=n.acc+(Date.now()-cut)-p;
+      changed=true;
     }
   }
   if(changed){saveTm(); renderTasks(); renderWeek(); updateWakeLock()}
@@ -661,7 +677,10 @@ function tick(){
 
   $("date").textContent=`${n.getFullYear()} оны ${MONTHS[n.getMonth()]}ын ${n.getDate()}, ${WD[n.getDay()]}`;
   const k=dayKey(n);
-  if(k!==lastKey){lastKey=k;renderTasks();renderWeek();} // new day: hourglass flips, list resets
+  if(k!==lastKey){ // new day: hourglass flips, list resets
+    lastKey=k; renderTasks(); renderWeek();
+    if($("v-stat").classList.contains("on")&&typeof renderStats==="function"){statY=null; statSel=null; renderStats()}
+  }
 }
 
 /* ---------- settings ---------- */
@@ -669,7 +688,11 @@ let draft=[];
 function openSettings(){
   ["dayStart","sleepS","sleepE","workS","workE"].forEach(id=>$(id).value=cfg[id]);
   draft=cfg.tasks.map(t=>({...t})); renderEdit(); $("sheet").classList.add("on");
+  document.body.classList.add("noscroll"); $("sheet").querySelector(".panel").scrollTop=0;
+  setTimeout(()=>$("sheetTitle").focus({preventScroll:true}),0);
 }
+function closeSettings(){$("sheet").classList.remove("on"); document.body.classList.remove("noscroll"); $("openSet").focus({preventScroll:true})}
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&$("sheet").classList.contains("on"))closeSettings()});
 function renderEdit(){
   const l=$("editList"); l.innerHTML="";
   draft.forEach((t,i)=>{
@@ -689,21 +712,22 @@ function renderEdit(){
   });
 }
 $("openSet").onclick=openSettings;
-$("close").onclick=()=>$("sheet").classList.remove("on");
-$("sheet").onclick=e=>{if(e.target.id==="sheet")$("sheet").classList.remove("on")};
+$("close").onclick=closeSettings;
+$("sheet").onclick=e=>{if(e.target.id==="sheet")closeSettings()};
 $("addTask").onclick=()=>{draft.push({id:"t"+Date.now(),name:"",min:0,rem:""});renderEdit();const ins=$("editList").querySelectorAll("input.nm");ins[ins.length-1].focus()};
 $("save").onclick=()=>{
   ["dayStart","sleepS","sleepE","workS","workE"].forEach(id=>{if($(id).value)cfg[id]=$(id).value});
   cfg.tasks=draft.filter(t=>t.name.trim()).map(t=>({id:t.id,name:t.name.trim(),min:t.min||0,rem:t.rem||""}));
   store.set("elsen_cfg",cfg); lastRemCheck=-1; lastKey=dayKey(new Date());
-  $("sheet").classList.remove("on"); drawBar(); renderTasks(); renderWeek(); tick();
+  closeSettings(); drawBar(); renderTasks(); renderWeek(); tick();
+  toast("Хадгаллаа ✓");
 };
 
 /* ---------- views (bottom nav) ---------- */
 function showView(v){
   if(!$(v)) v="v-day";
   document.querySelectorAll(".view").forEach(e=>e.classList.toggle("on",e.id===v));
-  document.querySelectorAll("nav.tabs button").forEach(b=>b.classList.toggle("on",b.dataset.v===v));
+  document.querySelectorAll("nav.tabs button").forEach(b=>{const on=b.dataset.v===v; b.classList.toggle("on",on); if(on)b.setAttribute("aria-current","page"); else b.removeAttribute("aria-current")});
   try{sessionStorage.setItem("elsen_view",v)}catch(e){}
   window.scrollTo(0,0);
   if(v==="v-sw") swRender();
@@ -1158,6 +1182,9 @@ if("serviceWorker" in navigator && /^https?:$/.test(location.protocol)){
     }catch(e){ /* not available here (e.g. inside claude.ai) */ }
   });
 }
+
+// Respect "reduce motion": stop the falling-sand stream animation.
+try{if(matchMedia("(prefers-reduced-motion: reduce)").matches)document.querySelector("svg.glass").pauseAnimations()}catch(e){}
 
 let startView="v-day"; try{startView=sessionStorage.getItem("elsen_view")||"v-day"}catch(e){}
 
