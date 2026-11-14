@@ -1,6 +1,5 @@
-/* Элсэн цаг — service worker: works offline, caches the app shell and fonts. */
-const VERSION = "elsen-v1";
-const FONTS = "elsen-fonts";
+/* Элсэн цаг — service worker: works offline by caching every file the app needs. */
+const VERSION = "elsen-v2";
 const SHELL = [
   "./",
   "./index.html",
@@ -11,7 +10,14 @@ const SHELL = [
   "./icons/icon-maskable-192.png",
   "./icons/icon-maskable-512.png",
   "./icons/apple-touch-icon.png",
-  "./icons/favicon-32.png"
+  "./icons/favicon-32.png",
+  "./fonts/fonts.css",
+  "./fonts/cormorant-garamond-cyrillic-ext.woff2",
+  "./fonts/cormorant-garamond-cyrillic.woff2",
+  "./fonts/cormorant-garamond-latin.woff2",
+  "./fonts/manrope-cyrillic-ext.woff2",
+  "./fonts/manrope-cyrillic.woff2",
+  "./fonts/manrope-latin.woff2"
 ];
 
 self.addEventListener("install", e => {
@@ -21,7 +27,7 @@ self.addEventListener("install", e => {
 self.addEventListener("activate", e => {
   e.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys.filter(k => k.startsWith("elsen-") && k !== VERSION && k !== FONTS).map(k => caches.delete(k)));
+    await Promise.all(keys.filter(k => k.startsWith("elsen-") && k !== VERSION).map(k => caches.delete(k)));
     await self.clients.claim();
   })());
 });
@@ -55,25 +61,12 @@ async function asset(req) {
   return cached || (await net) || Response.error();
 }
 
-// Google Fonts: cache first, so text keeps its typeface offline.
-async function font(req) {
-  const cache = await caches.open(FONTS);
-  const cached = await cache.match(req);
-  if (cached) return cached;
-  try {
-    const res = await fetch(req);
-    if (res.ok || res.type === "opaque") cache.put(req, res.clone());
-    return res;
-  } catch (_) { return Response.error(); }
-}
-
 self.addEventListener("fetch", e => {
   const req = e.request;
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (req.mode === "navigate") return e.respondWith(page(req));
   if (url.origin === location.origin) return e.respondWith(asset(req));
-  if (url.hostname === "fonts.googleapis.com" || url.hostname === "fonts.gstatic.com") return e.respondWith(font(req));
 });
 
 // Tapping a notification opens (or focuses) the app.
