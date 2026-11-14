@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Элсэн цаг</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0f0d0b; --bg2:#1a1612; --card:#1f1a15; --line:#3a3027;
+  --sand:#e3b26b; --sand2:#c98f45; --sand3:#f3d9a6;
+  --ink:#f4ead9; --mute:#a99a85; --dim:#6f6253;
+  --sleep:#5b6fa8; --work:#b8743a; --free:#3f5a46; --ok:#8fbf7f;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--ink);font-family:Manrope,system-ui,sans-serif;-webkit-tap-highlight-color:transparent}
+body{min-height:100vh;background:radial-gradient(120% 60% at 50% 0%,#2a2018 0%,var(--bg) 60%)}
+.wrap{max-width:460px;margin:0 auto;padding:20px 18px 60px}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+h1{font-family:"Cormorant Garamond",serif;font-weight:700;font-size:30px;letter-spacing:.5px;color:var(--sand3)}
+.date{font-size:12px;color:var(--mute);margin-top:2px}
+.iconbtn{background:var(--card);border:1px solid var(--line);color:var(--sand);width:42px;height:42px;border-radius:12px;font-size:20px;cursor:pointer}
+
+.hero{display:flex;flex-direction:column;align-items:center;margin:8px 0 6px}
+.glass{width:200px;height:300px;filter:drop-shadow(0 18px 40px rgba(227,178,107,.12))}
+.clock{font-family:"Cormorant Garamond",serif;font-size:56px;font-weight:600;line-height:1;margin-top:6px;font-variant-numeric:tabular-nums;color:var(--ink)}
+.left{font-size:13px;color:var(--mute);margin-top:6px;text-align:center}
+.left b{color:var(--sand);font-weight:600}
+
+.now{display:flex;gap:10px;margin-top:16px}
+.pill{flex:1;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px}
+.pill .k{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.8px}
+.pill .v{font-size:16px;font-weight:600;margin-top:4px}
+.pill .s{font-size:12px;color:var(--mute);margin-top:2px}
+
+.bar{position:relative;height:16px;border-radius:8px;overflow:hidden;background:var(--free);margin-top:18px;border:1px solid var(--line)}
+.seg{position:absolute;top:0;bottom:0}
+.marker{position:absolute;top:-4px;bottom:-4px;width:3px;background:var(--sand3);box-shadow:0 0 8px var(--sand);border-radius:2px}
+.ticks{display:flex;justify-content:space-between;font-size:10px;color:var(--dim);margin-top:4px}
+.legend{display:flex;gap:14px;font-size:11px;color:var(--mute);margin-top:6px}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+
+section{margin-top:26px}
+.sh{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
+h2{font-family:"Cormorant Garamond",serif;font-size:24px;font-weight:600;color:var(--sand3)}
+.count{font-size:13px;color:var(--mute)}
+.count b{color:var(--sand);font-size:16px}
+.prog{height:6px;background:var(--bg2);border-radius:3px;overflow:hidden;margin-bottom:12px}
+.prog div{height:100%;background:linear-gradient(90deg,var(--sand2),var(--sand));transition:width .4s}
+
+.task{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:8px;cursor:pointer;user-select:none;transition:.2s}
+.task:active{transform:scale(.985)}
+.box{flex:none;width:26px;height:26px;border-radius:8px;border:2px solid var(--sand2);display:grid;place-items:center;transition:.2s}
+.task.done{border-color:#3f5238;background:#1b2018}
+.task.done .box{background:var(--ok);border-color:var(--ok)}
+.task.done .box::after{content:"";width:7px;height:12px;border:solid #13180f;border-width:0 3px 3px 0;transform:rotate(45deg) translate(-1px,-1px)}
+.task .t{flex:1;font-size:15px;font-weight:500}
+.task.done .t{color:var(--mute);text-decoration:line-through;text-decoration-color:var(--dim)}
+.task .tm{font-size:11px;color:var(--dim)}
+.alldone{display:none;text-align:center;padding:14px;border-radius:14px;background:linear-gradient(135deg,#2b2214,#1d1a12);border:1px solid var(--sand2);color:var(--sand3);font-size:14px;margin-bottom:8px}
+.alldone.on{display:block}
+
+.week{display:flex;justify-content:space-between;gap:6px}
+.day{flex:1;text-align:center;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 0}
+.day .d{font-size:10px;color:var(--dim)}
+.day .dot{width:22px;height:22px;border-radius:50%;margin:6px auto 0;border:2px solid var(--line);display:grid;place-items:center;font-size:10px;color:var(--mute)}
+.day.full .dot{background:var(--sand);border-color:var(--sand);color:#2a1d0c;font-weight:700}
+.day.part .dot{border-color:var(--sand2)}
+.day.today{border-color:var(--sand2)}
+.streak{font-size:13px;color:var(--mute);margin-top:10px;text-align:center}
+.streak b{color:var(--sand);font-size:18px}
+
+/* settings sheet */
+.sheet{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-end;justify-content:center;z-index:10}
+.sheet.on{display:flex}
+.panel{background:var(--bg2);width:100%;max-width:460px;max-height:88vh;overflow:auto;border-radius:20px 20px 0 0;padding:20px 18px 30px;border-top:1px solid var(--line)}
+.panel h3{font-family:"Cormorant Garamond",serif;font-size:24px;color:var(--sand3);margin-bottom:14px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.row label{font-size:14px;color:var(--mute)}
+.row .pair{display:flex;gap:6px;align-items:center;color:var(--dim)}
+input[type=time],input[type=text]{background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:9px 10px;font:inherit;font-size:14px}
+input[type=time]{color-scheme:dark}
+.edit{display:flex;gap:8px;margin-bottom:8px}
+.edit input{flex:1}
+.del{background:none;border:1px solid var(--line);color:#c77;border-radius:10px;width:40px;cursor:pointer;font-size:18px}
+.btn{width:100%;padding:13px;border-radius:12px;border:1px solid var(--sand2);background:var(--card);color:var(--sand);font:inherit;font-weight:600;font-size:15px;cursor:pointer;margin-top:6px}
+.btn.primary{background:var(--sand);color:#2a1d0c;border-color:var(--sand)}
+.sub{font-size:12px;color:var(--dim);margin:16px 0 8px;text-transform:uppercase;letter-spacing:.8px}
+/* views + nav */
+.view{display:none}.view.on{display:block}
+.wrap{padding-bottom:100px}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:5;display:flex;justify-content:center;background:rgba(15,13,11,.94);backdrop-filter:blur(10px);border-top:1px solid var(--line);padding:8px 8px calc(8px + env(safe-area-inset-bottom))}
+nav.tabs .in{display:flex;width:100%;max-width:460px;gap:6px}
+nav.tabs button{flex:1;background:none;border:0;color:var(--dim);font:inherit;font-size:11px;font-weight:600;padding:6px 0;border-radius:10px;cursor:pointer}
+nav.tabs button span{display:block;font-size:20px;margin-bottom:2px}
+nav.tabs button.on{color:var(--sand);background:var(--card)}
+
+/* stopwatch */
+.sw{text-align:center;margin-top:30px}
+.sw .big{font-family:"Cormorant Garamond",serif;font-size:72px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1}
+.sw .ms{font-size:32px;color:var(--sand)}
+.ring{width:240px;height:240px;margin:0 auto 20px;position:relative}
+.ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+.ring .ct{position:absolute;inset:0;display:grid;place-items:center}
+.ctrls{display:flex;gap:12px;justify-content:center;margin-top:22px}
+.round{width:84px;height:84px;border-radius:50%;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-weight:600;font-size:15px;cursor:pointer}
+.round.go{background:var(--sand);color:#2a1d0c;border-color:var(--sand)}
+.round.stop{background:#5a2a22;color:#ffd9cc;border-color:#7a3a2e}
+.laps{margin-top:24px}
+.lap{display:flex;justify-content:space-between;padding:12px 4px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;font-size:15px}
+.lap .n{color:var(--mute)}
+.lap.best .d{color:var(--ok)}.lap.worst .d{color:#e08a7a}
+.presets{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:16px}
+.chip{background:var(--card);border:1px solid var(--line);color:var(--mute);border-radius:20px;padding:7px 12px;font:inherit;font-size:13px;cursor:pointer}
+.chip.on{border-color:var(--sand);color:var(--sand)}
+
+/* food */
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:12px}
+.addrow{display:flex;gap:8px}
+.addrow input{flex:1;min-width:0}
+.addbtn{background:var(--sand);color:#2a1d0c;border:0;border-radius:10px;padding:0 16px;font:inherit;font-weight:700;font-size:18px;cursor:pointer}
+.pantry{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.pchip{display:flex;align-items:center;gap:6px;background:#2a2219;border:1px solid var(--sand2);color:var(--sand3);border-radius:20px;padding:6px 6px 6px 12px;font-size:14px}
+.pchip button{background:none;border:0;color:var(--mute);font-size:16px;width:22px;height:22px;cursor:pointer}
+.quick{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.quick .chip{font-size:12px;padding:5px 10px}
+.small{font-size:12px;color:var(--dim);margin-top:8px}
+select{background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:9px 10px;font:inherit;font-size:14px;color-scheme:dark}
+.daytabs{display:flex;gap:6px;overflow-x:auto;margin-bottom:12px;padding-bottom:4px}
+.daytabs .chip{flex:none}
+.meal{padding:10px 0;border-bottom:1px solid var(--line)}
+.meal:last-child{border:0}
+.meal .k{font-size:11px;color:var(--sand);text-transform:uppercase;letter-spacing:.8px}
+.meal .v{font-size:15px;margin-top:3px;line-height:1.45}
+.ex{font-size:14px;line-height:1.6;color:var(--ink)}
+.ex li{margin-left:18px}
+.use{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px;line-height:1.45}
+.use b{color:var(--sand3);flex:none;min-width:80px}
+.status{font-size:13px;color:var(--mute);text-align:center;margin:10px 0}
+.tip{font-size:14px;line-height:1.5;padding:6px 0;color:var(--mute)}
+.tip::before{content:"• ";color:var(--sand)}
+.quote{text-align:center;font-family:"Cormorant Garamond",serif;font-style:italic;font-size:17px;color:var(--mute);margin-top:30px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Элсэн цаг</h1>
+      <div class="date" id="date"></div>
+    </div>
+    <button class="iconbtn" id="openSet" aria-label="Тохиргоо">⚙</button>
+  </header>
+
+  <div class="view on" id="v-day">
+  <div class="hero">
+    <svg class="glass" viewBox="0 0 200 320" aria-hidden="true">
+      <defs>
+        <clipPath id="topC"><path d="M44,32 L156,32 C156,98 108,132 103,160 L97,160 C92,132 44,98 44,32Z"/></clipPath>
+        <clipPath id="botC"><path d="M97,160 L103,160 C108,188 156,222 156,288 L44,288 C44,222 92,188 97,160Z"/></clipPath>
+        <linearGradient id="sandG" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#f3d9a6"/><stop offset="1" stop-color="#c98f45"/>
+        </linearGradient>
+        <linearGradient id="glassG" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="rgba(255,240,220,.10)"/><stop offset=".25" stop-color="rgba(255,240,220,.02)"/>
+          <stop offset=".8" stop-color="rgba(255,240,220,.02)"/><stop offset="1" stop-color="rgba(255,240,220,.08)"/>
+        </linearGradient>
+        <linearGradient id="woodG" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#7a5232"/><stop offset="1" stop-color="#4a2f1b"/>
+        </linearGradient>
+      </defs>
+      <!-- glass body -->
+      <path d="M44,32 L156,32 C156,98 108,132 103,160 C108,188 156,222 156,288 L44,288 C44,222 92,188 97,160 C92,132 44,98 44,32Z" fill="url(#glassG)" stroke="rgba(243,217,166,.35)" stroke-width="1.5"/>
+      <!-- sand -->
+      <g clip-path="url(#topC)"><rect id="sTop" x="0" y="160" width="200" height="0" fill="url(#sandG)"/></g>
+      <g clip-path="url(#botC)">
+        <rect id="sBot" x="0" y="288" width="200" height="0" fill="url(#sandG)"/>
+        <ellipse id="mound" cx="100" cy="288" rx="40" ry="6" fill="#e3b26b"/>
+      </g>
+      <line id="stream" x1="100" y1="160" x2="100" y2="288" stroke="#f3d9a6" stroke-width="1.6" stroke-dasharray="2 4">
+        <animate attributeName="stroke-dashoffset" from="0" to="-12" dur=".4s" repeatCount="indefinite"/>
+      </line>
+      <!-- frame -->
+      <rect x="28" y="14" width="144" height="18" rx="5" fill="url(#woodG)"/>
+      <rect x="28" y="288" width="144" height="18" rx="5" fill="url(#woodG)"/>
+      <rect x="32" y="32" width="6" height="256" rx="3" fill="#5c3c24"/>
+      <rect x="162" y="32" width="6" height="256" rx="3" fill="#5c3c24"/>
+      <path d="M60,40 C60,80 80,110 92,130" stroke="rgba(255,255,255,.18)" stroke-width="2" fill="none" stroke-linecap="round"/>
+    </svg>
+    <div class="clock" id="clock">--:--</div>
+    <div class="left" id="left"></div>
+  </div>
+
+  <div class="now">
+    <div class="pill"><div class="k">Одоо</div><div class="v" id="nowBlock">—</div><div class="s" id="nowSub"></div></div>
+    <div class="pill"><div class="k">Дараа нь</div><div class="v" id="nextBlock">—</div><div class="s" id="nextSub"></div></div>
+  </div>
+
+  <div class="bar" id="bar"></div>
+  <div class="ticks" id="ticks"></div>
+  <div class="legend">
+    <span><i style="background:var(--sleep)"></i>Унтах</span>
+    <span><i style="background:var(--work)"></i>Ажил</span>
+    <span><i style="background:var(--free)"></i>Чөлөөт</span>
+  </div>
+
+  <section>
+    <div class="sh"><h2>Заавал хийх</h2><div class="count"><b id="cnt">0</b> / <span id="tot">0</span></div></div>
+    <div class="prog"><div id="prog" style="width:0"></div></div>
+    <div class="alldone" id="alldone">Бүгдийг хийлээ. Өнөөдрийн элс дэмий урсаагүй.</div>
+    <div id="tasks"></div>
+  </section>
+
+  <section>
+    <div class="sh"><h2>Сүүлийн 7 хоног</h2></div>
+    <div class="week" id="week"></div>
+    <div class="streak" id="streak"></div>
+  </section>
+
+  <div class="quote">Элс зогсохгүй. Харин чи түүнийг юунд зарцуулахаа сонгоно.</div>
+  </div>
+
+  <!-- STOPWATCH -->
+  <div class="view" id="v-sw">
+    <div class="sw">
+      <div class="ring">
+        <svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="54" fill="none" stroke="#2a2219" stroke-width="6"/>
+          <circle id="swArc" cx="60" cy="60" r="54" fill="none" stroke="url(#swG)" stroke-width="6" stroke-linecap="round" stroke-dasharray="339.3" stroke-dashoffset="339.3"/>
+          <defs><linearGradient id="swG"><stop offset="0" stop-color="#c98f45"/><stop offset="1" stop-color="#f3d9a6"/></linearGradient></defs>
+        </svg>
+        <div class="ct"><div><div class="big" id="swBig">00:00</div><div class="ms" id="swMs">.00</div></div></div>
+      </div>
+      <div class="small" id="swLabel">Секундомер</div>
+      <div class="presets" id="swFor"></div>
+      <div class="ctrls">
+        <button class="round" id="swLap">Тойрог</button>
+        <button class="round go" id="swGo">Эхлэх</button>
+      </div>
+      <div class="laps" id="swLaps"></div>
+    </div>
+  </div>
+
+  <!-- FOOD + FITNESS -->
+  <div class="view" id="v-food">
+    <section style="margin-top:14px">
+      <div class="sh"><h2>Гэрт байгаа хүнс</h2><div class="count"><b id="pCnt">0</b></div></div>
+      <div class="card">
+        <div class="addrow"><input type="text" id="pIn" placeholder="Жишээ нь: үхрийн мах 1 кг"><button class="addbtn" id="pAdd">+</button></div>
+        <div class="pantry" id="pantry"></div>
+        <div class="small">Түргэн нэмэх:</div>
+        <div class="quick" id="quick"></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sh"><h2>7 хоногийн хөтөлбөр</h2></div>
+      <div class="card">
+        <div class="row"><label>Зорилго</label>
+          <select id="goal"><option>Эрүүл хооллолт</option><option>Жин хасах</option><option>Булчин нэмэх</option><option>Эрч хүч нэмэх</option></select></div>
+        <div class="row"><label>Хэдэн хүнд</label><select id="ppl"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></div>
+        <div class="row"><label>Ажлын ээлж</label><select id="shift"><option>Өглөөний ээлж</option><option>Оройн ээлж</option><option>Шөнийн ээлж</option><option>Ээлж солигддог</option></select></div>
+        <input type="text" id="note" placeholder="Нэмэлт: идэхгүй хоол, дуртай хоол г.м." style="width:100%;margin-top:4px">
+        <button class="btn primary" id="gen">Хөтөлбөр гаргах</button>
+        <div class="status" id="genStatus"></div>
+      </div>
+      <div id="plan"></div>
+    </section>
+  </div>
+</div>
+
+<nav class="tabs"><div class="in">
+  <button class="on" data-v="v-day"><span>⏳</span>Өдөр</button>
+  <button data-v="v-sw"><span>⏱</span>Секундомер</button>
+  <button data-v="v-food"><span>🥣</span>Хоол & Фитнес</button>
+</div></nav>
+
+<div class="sheet" id="sheet">
+  <div class="panel">
+    <h3>Тохиргоо</h3>
+    <div class="row"><label>Өдөр эхлэх цаг</label><input type="time" id="dayStart"></div>
+    <div class="row"><label>Унтах</label><div class="pair"><input type="time" id="sleepS">–<input type="time" id="sleepE"></div></div>
+    <div class="row"><label>Ажил</label><div class="pair"><input type="time" id="workS">–<input type="time" id="workE"></div></div>
+    <div class="sub">Заавал хийх зүйлс</div>
+    <div id="editList"></div>
+    <button class="btn" id="addTask">+ Нэмэх</button>
+    <button class="btn primary" id="save">Хадгалах</button>
+    <button class="btn" id="close">Хаах</button>
+  </div>
+</div>
+
+<script>
+const DEFAULT = {
+  dayStart:"00:00", sleepS:"22:30", sleepE:"06:00", workS:"07:00", workE:"15:30",
+  tasks:[
+    {id:"t1",name:"Duolingo"},
+    {id:"t2",name:"Охиноо хөмсөг норгох"},
+    {id:"t3",name:"Суниах 100"},
+    {id:"t4",name:"Эрүүний дасгал 15 минут"},
+    {id:"t5",name:"Ном унших 30 минут"},
+    {id:"t6",name:"Гүйх 30 минут (доод тал нь)"}
+  ]
+};
+const store = {
+  get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},
+  set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+};
+let cfg = Object.assign({}, DEFAULT, store.get("elsen_cfg",{}));
+let hist = store.get("elsen_hist",{}); // {dayKey:{taskId:"HH:MM"}}
+
+const $ = id => document.getElementById(id);
+const toMin = s => {const [h,m]=s.split(":").map(Number);return h*60+m};
+const pad = n => String(n).padStart(2,"0");
+const fmtDur = m => {m=Math.max(0,Math.round(m));const h=Math.floor(m/60),mm=m%60;return h?`${h}ц ${mm}м`:`${mm}м`};
+const MONTHS=["1-р сар","2-р сар","3-р сар","4-р сар","5-р сар","6-р сар","7-р сар","8-р сар","9-р сар","10-р сар","11-р сар","12-р сар"];
+const WD=["Ням","Дав","Мяг","Лха","Пүр","Баа","Бям"];
+
+function dayKey(d){
+  const x=new Date(d.getTime()-toMin(cfg.dayStart)*60000);
+  return `${x.getFullYear()}-${pad(x.getMonth()+1)}-${pad(x.getDate())}`;
+}
+function inRange(m,s,e){return s<=e ? (m>=s&&m<e) : (m>=s||m<e)}
+function blockAt(m){
+  if(inRange(m,toMin(cfg.sleepS),toMin(cfg.sleepE))) return "sleep";
+  if(inRange(m,toMin(cfg.workS),toMin(cfg.workE))) return "work";
+  return "free";
+}
+const NAMES={sleep:"Унтах цаг",work:"Ажлын цаг",free:"Чөлөөт цаг"};
+
+function nextChange(m){
+  const cur=blockAt(m);
+  for(let i=1;i<=1440;i++){const b=blockAt((m+i)%1440);if(b!==cur)return{at:i,b}}
+  return null;
+}
+
+/* ---------- hourglass ---------- */
+function drawGlass(elapsed){
+  const H=128, rem=1-elapsed;
+  const hTop=H*Math.sqrt(rem);
+  const hBot=H*(1-Math.sqrt(Math.max(0,1-elapsed)));
+  $("sTop").setAttribute("y",160-hTop); $("sTop").setAttribute("height",hTop);
+  $("sBot").setAttribute("y",288-hBot); $("sBot").setAttribute("height",hBot);
+  const topY=288-hBot;
+  $("mound").setAttribute("cy",topY);
+  $("mound").setAttribute("rx",Math.min(46,10+hBot*.5));
+  $("mound").setAttribute("ry",Math.min(7,1+hBot*.08));
+  $("stream").setAttribute("y2",topY);
+  $("stream").style.opacity = rem>0.002 ? 1 : 0;
+}
+
+/* ---------- timeline bar ---------- */
+function drawBar(){
+  const bar=$("bar"); bar.innerHTML="";
+  const ds=toMin(cfg.dayStart);
+  let start=0, cur=blockAt(ds);
+  for(let i=1;i<=1440;i++){
+    const b = i<1440 ? blockAt((ds+i)%1440) : null;
+    if(b!==cur){
+      if(cur!=="free"){const s=document.createElement("div");s.className="seg";
+        s.style.left=(start/1440*100)+"%";s.style.width=((i-start)/1440*100)+"%";
+        s.style.background=cur==="sleep"?"var(--sleep)":"var(--work)";bar.appendChild(s);}
+      start=i;cur=b;
+    }
+  }
+  const mk=document.createElement("div");mk.className="marker";mk.id="marker";bar.appendChild(mk);
+  const t=$("ticks");t.innerHTML="";
+  for(let i=0;i<=4;i++){const m=(ds+i*360)%1440;const sp=document.createElement("span");sp.textContent=`${pad(Math.floor(m/60))}:${pad(m%60)}`;t.appendChild(sp)}
+}
+
+/* ---------- tasks ---------- */
+function todayDone(){const k=dayKey(new Date());return hist[k]||(hist[k]={})}
+function renderTasks(){
+  const done=todayDone(), box=$("tasks"); box.innerHTML="";
+  cfg.tasks.forEach(t=>{
+    const el=document.createElement("div");
+    el.className="task"+(done[t.id]?" done":"");
+    el.innerHTML=`<div class="box"></div><div class="t"></div><div class="tm">${done[t.id]||""}</div>`;
+    el.querySelector(".t").textContent=t.name;
+    el.onclick=()=>{
+      const d=todayDone();
+      if(d[t.id]) delete d[t.id]; else {const n=new Date();d[t.id]=`${pad(n.getHours())}:${pad(n.getMinutes())}`}
+      store.set("elsen_hist",hist); renderTasks(); renderWeek();
+    };
+    box.appendChild(el);
+  });
+  const c=cfg.tasks.filter(t=>done[t.id]).length, tot=cfg.tasks.length;
+  $("cnt").textContent=c; $("tot").textContent=tot;
+  $("prog").style.width=(tot?c/tot*100:0)+"%";
+  $("alldone").classList.toggle("on", tot>0 && c===tot);
+}
+function scoreFor(k){const d=hist[k]||{};const c=cfg.tasks.filter(t=>d[t.id]).length;return{c,tot:cfg.tasks.length}}
+function renderWeek(){
+  const w=$("week"); w.innerHTML="";
+  const now=new Date(), base=new Date(now.getTime()-toMin(cfg.dayStart)*60000);
+  for(let i=6;i>=0;i--){
+    const d=new Date(base);d.setDate(base.getDate()-i);
+    const k=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    const {c,tot}=scoreFor(k);
+    const el=document.createElement("div");
+    el.className="day"+(c===tot&&tot?" full":c?" part":"")+(i===0?" today":"");
+    el.innerHTML=`<div class="d">${WD[d.getDay()]}</div><div class="dot">${c===tot&&tot?"✓":c||""}</div>`;
+    w.appendChild(el);
+  }
+  // streak: count full days backwards; today counts if full, otherwise start from yesterday
+  let s=0;
+  for(let i=0;i<400;i++){
+    const d=new Date(base);d.setDate(base.getDate()-i);
+    const k=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    const {c,tot}=scoreFor(k);
+    if(tot&&c===tot) s++; else if(i===0) continue; else break;
+  }
+  $("streak").innerHTML = s ? `Тасралтгүй <b>${s}</b> өдөр бүгдийг биелүүлсэн` : `Өнөөдрөөс эхлээд дараалал үүсгээрэй`;
+}
+
+/* ---------- tick ---------- */
+let lastKey=dayKey(new Date());
+function tick(){
+  const n=new Date();
+  const m=n.getHours()*60+n.getMinutes()+n.getSeconds()/60;
+  const ds=toMin(cfg.dayStart);
+  const since=((m-ds)%1440+1440)%1440;
+  const elapsed=since/1440;
+  drawGlass(elapsed);
+  $("clock").textContent=`${pad(n.getHours())}:${pad(n.getMinutes())}`;
+  const remSec=Math.round((1440-since)*60);
+  const rh=Math.floor(remSec/3600), rm=Math.floor(remSec%3600/60), rs=remSec%60;
+  $("left").innerHTML=`Өдөр дуусахад <b>${pad(rh)}:${pad(rm)}:${pad(rs)}</b> · ${Math.round(elapsed*100)}% урссан`;
+  const mk=$("marker"); if(mk) mk.style.left=`calc(${elapsed*100}% - 1px)`;
+
+  const cur=blockAt(Math.floor(m)), nx=nextChange(Math.floor(m));
+  $("nowBlock").textContent=NAMES[cur];
+  $("nowSub").textContent=nx?`${fmtDur(nx.at)} үлдсэн`:"";
+  $("nextBlock").textContent=nx?NAMES[nx.b]:"—";
+  if(nx){const t=(Math.floor(m)+nx.at)%1440;$("nextSub").textContent=`${pad(Math.floor(t/60))}:${pad(t%60)}-д`}
+
+  $("date").textContent=`${n.getFullYear()} оны ${MONTHS[n.getMonth()]}ын ${n.getDate()}, ${WD[n.getDay()]}`;
+  const k=dayKey(n);
+  if(k!==lastKey){lastKey=k;renderTasks();renderWeek();} // new day: hourglass flips, list resets
+}
+
+/* ---------- settings ---------- */
+let draft=[];
+function openSettings(){
+  ["dayStart","sleepS","sleepE","workS","workE"].forEach(id=>$(id).value=cfg[id]);
+  draft=cfg.tasks.map(t=>({...t})); renderEdit(); $("sheet").classList.add("on");
+}
+function renderEdit(){
+  const l=$("editList"); l.innerHTML="";
+  draft.forEach((t,i)=>{
+    const r=document.createElement("div");r.className="edit";
+    const inp=document.createElement("input");inp.type="text";inp.value=t.name;inp.oninput=e=>t.name=e.target.value;
+    const b=document.createElement("button");b.className="del";b.textContent="×";b.onclick=()=>{draft.splice(i,1);renderEdit()};
+    r.append(inp,b);l.appendChild(r);
+  });
+}
+$("openSet").onclick=openSettings;
+$("close").onclick=()=>$("sheet").classList.remove("on");
+$("sheet").onclick=e=>{if(e.target.id==="sheet")$("sheet").classList.remove("on")};
+$("addTask").onclick=()=>{draft.push({id:"t"+Date.now(),name:""});renderEdit();const ins=$("editList").querySelectorAll("input");ins[ins.length-1].focus()};
+$("save").onclick=()=>{
+  ["dayStart","sleepS","sleepE","workS","workE"].forEach(id=>{if($(id).value)cfg[id]=$(id).value});
+  cfg.tasks=draft.filter(t=>t.name.trim()).map(t=>({id:t.id,name:t.name.trim()}));
+  store.set("elsen_cfg",cfg); lastKey=dayKey(new Date());
+  $("sheet").classList.remove("on"); drawBar(); renderTasks(); renderWeek(); tick();
+};
+
+drawBar(); renderTasks(); renderWeek(); tick();
+setInterval(tick,1000);
+</script>
+</body>
+</html>
