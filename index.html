@@ -85,6 +85,9 @@ h2{font-family:"Cormorant Garamond",serif;font-size:24px;font-weight:600;color:v
 .opts input[type=number]{width:62px}
 .alldone{display:none;text-align:center;padding:14px;border-radius:14px;background:linear-gradient(135deg,#2b2214,#1d1a12);border:1px solid var(--sand2);color:var(--sand3);font-size:14px;margin-bottom:8px}
 .alldone.on{display:block}
+.alldone.pop{animation:pop .6s cubic-bezier(.2,1.6,.4,1)}
+@keyframes pop{0%{transform:scale(.9);opacity:.3}60%{transform:scale(1.03)}100%{transform:none;opacity:1}}
+button.day{font:inherit;color:inherit;cursor:pointer;min-width:0}
 
 .week{display:flex;justify-content:space-between;gap:6px}
 .day{flex:1;text-align:center;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 0}
@@ -526,6 +529,11 @@ function drawBar(){
 
 /* ---------- tasks ---------- */
 const hhmm=d=>`${pad(d.getHours())}:${pad(d.getMinutes())}`;
+let allDoneState={k:null,all:null};
+function celebrate(){
+  if(typeof unlockAudio==="function"){unlockAudio(); chime()} buzz([80,60,80,60,240]);
+  const b=$("alldone"); b.classList.remove("pop"); void b.offsetWidth; b.classList.add("pop");
+}
 function todayDone(){const k=dayKey(new Date());return hist[k]||(hist[k]={})}
 function renderTasks(){
   const k=dayKey(new Date()), done=todayDone(), box=$("tasks"); box.innerHTML="";
@@ -561,6 +569,10 @@ function renderTasks(){
   $("alldone").classList.toggle("on", tot>0 && c===tot);
   // Number of things left today on the installed app icon (where supported)
   try{if(navigator.setAppBadge){const left=tot-c; (left>0?navigator.setAppBadge(left):navigator.clearAppBadge()).catch(()=>{})}}catch(e){}
+  // Celebrate the moment the last task of the day gets done (not on load, not on a new day)
+  const all=tot>0&&c===tot;
+  if(all&&allDoneState.k===k&&allDoneState.all===false) celebrate();
+  allDoneState={k,all};
   updateTaskTimers();
 }
 // A day is scored against the tasks it had (snapshot); days before snapshots existed use today's list.
@@ -667,9 +679,11 @@ function renderWeek(){
     const d=new Date(base);d.setDate(base.getDate()-i);
     const k=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
     const {c,tot}=scoreFor(k);
-    const el=document.createElement("div");
+    const el=document.createElement("button");
     el.className="day"+(c===tot&&tot?" full":c?" part":"")+(i===0?" today":"");
     el.innerHTML=`<div class="d">${WD[d.getDay()]}</div><div class="dot">${c===tot&&tot?"✓":c||""}</div>`;
+    el.setAttribute("aria-label",`${WD_FULL[d.getDay()]}: ${c}/${tot}. Дэлгэрэнгүй`);
+    el.onclick=()=>{statY=d.getFullYear(); statM=d.getMonth(); statSel=k; showView("v-stat")};  // open that day in Stats
     w.appendChild(el);
   }
   // streak: count full days backwards; today counts if full, otherwise start from yesterday
@@ -1312,6 +1326,17 @@ if("serviceWorker" in navigator && /^https?:$/.test(location.protocol)){
     }catch(e){ /* not available here (e.g. inside claude.ai) */ }
   });
 }
+
+// Fonts ship with the app (fonts/). When the page runs on its own without that folder, e.g. as a
+// single-file artifact on claude.ai, load the same fonts from Google Fonts instead.
+(function(){
+  const l=document.querySelector('link[href="fonts/fonts.css"]');
+  let ok=false; try{ok=!!(l&&l.sheet&&l.sheet.cssRules.length)}catch(e){}
+  if(ok) return;
+  const g=document.createElement("link"); g.rel="stylesheet";
+  g.href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap";
+  document.head.appendChild(g);
+})();
 
 // Respect "reduce motion": stop the falling-sand stream animation.
 try{if(matchMedia("(prefers-reduced-motion: reduce)").matches)document.querySelector("svg.glass").pauseAnimations()}catch(e){}
