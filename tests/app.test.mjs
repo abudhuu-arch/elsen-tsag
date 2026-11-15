@@ -64,9 +64,9 @@ test('loads with all four tabs and the hourglass', async t => {
 
 test('old saved data migrates without losing history', async t => {
   const hist = { [keyAgo(3)]: { t1: '08:00', t5: '21:00' } };
-  const { page } = await open(t, `()=>{localStorage.elsen_cfg=${JSON.stringify(JSON.stringify({ dayStart: '00:00', sleepS: '22:30', sleepE: '06:00', workS: '07:00', workE: '15:30', tasks: [{ id: 't1', name: 'Duolingo' }, { id: 't5', name: 'Ном унших 30 минут' }] }))};localStorage.elsen_hist=${JSON.stringify(JSON.stringify(hist))}}`);
+  const { page } = await open(t, `()=>{localStorage.elsen_cfg=${JSON.stringify(JSON.stringify({ dayStart: '00:00', sleepS: '23:00', sleepE: '07:00', workS: '09:00', workE: '18:00', tasks: [{ id: 't1', name: 'Гадаад хэл' }, { id: 't5', name: 'Ном унших 30 минут' }] }))};localStorage.elsen_hist=${JSON.stringify(JSON.stringify(hist))}}`);
   const tasks = await page.evaluate(() => cfg.tasks);
-  assert.deepEqual(tasks, [{ id: 't1', name: 'Duolingo', min: 0, rem: '' }, { id: 't5', name: 'Ном унших 30 минут', min: 30, rem: '' }]);
+  assert.deepEqual(tasks, [{ id: 't1', name: 'Гадаад хэл', min: 0, rem: '' }, { id: 't5', name: 'Ном унших 30 минут', min: 30, rem: '' }]);
   assert.deepEqual(JSON.parse(await page.evaluate(() => localStorage.elsen_hist)), hist);
   assert.deepEqual(await page.$$eval('.tbtn', b => b.map(x => x.textContent)), ['▶ 30м']);
 });
@@ -80,7 +80,7 @@ test('corrupted or hand-edited data does not break the app', async t => {
   };
   const { page } = await open(t, `()=>{const b=${JSON.stringify(bad)};for(const k in b)localStorage.setItem(k,JSON.stringify(b[k]))}`);
   const c = await page.evaluate(() => cfg);
-  assert.equal(c.dayStart, '00:00'); assert.equal(c.sleepS, '22:30');
+  assert.equal(c.dayStart, '00:00'); assert.equal(c.sleepS, '23:00');
   assert.deepEqual(c.tasks, [{ id: 't1', name: 'Ном 20 мин', min: 20, rem: '' }, { id: '7', name: 'Гүйх', min: 600, rem: '' }]);
   assert.match(await page.textContent('#clock'), /^\d\d:\d\d:\d\d$/);
   for (const v of ['v-sw', 'v-food', 'v-stat']) await page.click(`nav.tabs button[data-v="${v}"]`);
@@ -128,8 +128,9 @@ test('reminder fires once, and a missed one is marked late', async t => {
   await page.evaluate(() => {
     const at = m => { const d = new Date(Date.now() + m * 60000); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
     cfg.tasks[0].rem = at(-2); cfg.tasks[1].rem = at(-120); store.set('elsen_cfg', cfg);
-    window.__n = []; const o = ServiceWorkerRegistration.prototype.showNotification;
-    ServiceWorkerRegistration.prototype.showNotification = function (a, b) { __n.push(a); return o.call(this, a, b); };
+    // Record only: newer headless Chromium rejects real notifications, which would make the app's fallback count twice.
+    window.__n = [];
+    ServiceWorkerRegistration.prototype.showNotification = function (a) { __n.push(a); return Promise.resolve(); };
     window.Notification = class { constructor(a) { __n.push(a); } static get permission() { return 'granted'; } };
     lastRemCheck = -1; tick();
   });
@@ -144,7 +145,7 @@ test('reminder fires once, and a missed one is marked late', async t => {
 test('stopwatch laps, persists, and credits time to a task', async t => {
   const { page } = await open(t);
   await page.click('nav.tabs button[data-v="v-sw"]');
-  await page.click('#swFor .chip:has-text("Duolingo")');
+  await page.click('#swFor .chip:has-text("Гадаад хэл")');
   await page.click('#swGo'); await page.waitForTimeout(600);
   await page.click('#swLap'); await page.waitForTimeout(300); await page.click('#swGo');
   assert.equal(await page.locator('.lap').count(), 1);

@@ -515,14 +515,15 @@ input[type=time]::-webkit-date-and-time-value{text-align:left}
 
 <script>
 const DEFAULT = {
-  dayStart:"00:00", sleepS:"22:30", sleepE:"06:00", workS:"07:00", workE:"15:30",
+  // Example schedule for a first start; each person changes it in Settings.
+  dayStart:"00:00", sleepS:"23:00", sleepE:"07:00", workS:"09:00", workE:"18:00",
   tasks:[
-    {id:"t1",name:"Duolingo"},
-    {id:"t2",name:"Охиноо хөмсөг норгох"},
-    {id:"t3",name:"Суниах 100"},
-    {id:"t4",name:"Эрүүний дасгал 15 минут"},
+    {id:"t1",name:"Гадаад хэл 15 минут"},
+    {id:"t2",name:"Ус уух 8 аяга"},
+    {id:"t3",name:"Сунгалт 10 минут"},
+    {id:"t4",name:"Алхах 30 минут"},
     {id:"t5",name:"Ном унших 30 минут"},
-    {id:"t6",name:"Гүйх 30 минут (доод тал нь)"}
+    {id:"t6",name:"Өдрийн тэмдэглэл бичих"}
   ]
 };
 const store = {
@@ -1680,7 +1681,9 @@ if("serviceWorker" in navigator && /^https?:$/.test(location.protocol)){
 (function(){
   const l=document.querySelector('link[href="fonts/fonts.css"]');
   let ok=false; try{ok=!!(l&&l.sheet&&l.sheet.cssRules.length)}catch(e){}
-  if(ok) return;
+  // Only inside a host page (claude.ai): the hosted / installed app never contacts Google, system fonts stand in.
+  let framed=true; try{framed=window.self!==window.top}catch(e){}
+  if(ok||!framed) return;
   const g=document.createElement("link"); g.rel="stylesheet";
   g.href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap";
   document.head.appendChild(g);
