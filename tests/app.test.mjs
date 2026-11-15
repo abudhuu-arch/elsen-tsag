@@ -67,7 +67,7 @@ test('old saved data migrates without losing history', async t => {
   const hist = { [keyAgo(3)]: { t1: '08:00', t5: '21:00' } };
   const { page } = await open(t, `()=>{localStorage.elsen_cfg=${JSON.stringify(JSON.stringify({ dayStart: '00:00', sleepS: '23:00', sleepE: '07:00', workS: '09:00', workE: '18:00', tasks: [{ id: 't1', name: 'Гадаад хэл' }, { id: 't5', name: 'Ном унших 30 минут' }] }))};localStorage.elsen_hist=${JSON.stringify(JSON.stringify(hist))}}`);
   const tasks = await page.evaluate(() => cfg.tasks);
-  assert.deepEqual(tasks, [{ id: 't1', name: 'Гадаад хэл', min: 0, rem: '', unit: '' }, { id: 't5', name: 'Ном унших 30 минут', min: 30, rem: '', unit: '' }]);
+  assert.deepEqual(tasks, [{ id: 't1', name: 'Гадаад хэл', min: 0, rem: '', unit: '', link: '' }, { id: 't5', name: 'Ном унших 30 минут', min: 30, rem: '', unit: '', link: '' }]);
   assert.deepEqual(JSON.parse(await page.evaluate(() => localStorage.elsen_hist)), hist);
   assert.deepEqual(await page.$$eval('.tbtn', b => b.map(x => x.textContent)), ['▶ 30м']);
 });
@@ -82,20 +82,20 @@ test('corrupted or hand-edited data does not break the app', async t => {
   const { page } = await open(t, `()=>{const b=${JSON.stringify(bad)};for(const k in b)localStorage.setItem(k,JSON.stringify(b[k]))}`);
   const c = await page.evaluate(() => cfg);
   assert.equal(c.dayStart, '00:00'); assert.equal(c.sleepS, '23:00');
-  assert.deepEqual(c.tasks, [{ id: 't1', name: 'Ном 20 мин', min: 20, rem: '', unit: '' }, { id: '7', name: 'Гүйх', min: 600, rem: '', unit: '' }]);
+  assert.deepEqual(c.tasks, [{ id: 't1', name: 'Ном 20 мин', min: 20, rem: '', unit: '', link: '' }, { id: '7', name: 'Гүйх', min: 600, rem: '', unit: '', link: '' }]);
   assert.match(await page.textContent('#clock'), /^\d\d:\d\d:\d\d$/);
   for (const v of ['v-sw', 'v-food', 'v-stat']) await page.click(`nav.tabs button[data-v="${v}"]`);
 });
 
 test('ticking a task updates count, week and storage; keyboard works', async t => {
   const { page } = await open(t);
-  await page.click('.task[data-id="t2"]');
+  await page.click('.task[data-id="t6"]');                     // t2 is the water task: a tap there adds a cup
   assert.equal(await page.textContent('#cnt'), '1');
   assert.equal(await page.$eval('.day.today .dot', e => e.textContent), '1');
   await page.focus('.task[data-id="t3"]'); await page.keyboard.press('Space');
   assert.equal(await page.getAttribute('.task[data-id="t3"]', 'aria-checked'), 'true');
   const h = JSON.parse(await page.evaluate(() => localStorage.elsen_hist));
-  assert.deepEqual(Object.keys(Object.values(h).find(d => Object.keys(d).length)).sort(), ['t2', 't3']);
+  assert.deepEqual(Object.keys(Object.values(h).find(d => Object.keys(d).length)).sort(), ['t3', 't6']);
 });
 
 test('task timer counts down, pauses, and completes the task', async t => {
@@ -138,6 +138,7 @@ test('reminder fires once, and a missed one is marked late', async t => {
   await page.waitForTimeout(300);
   assert.equal((await page.evaluate(() => __n)).length, 1);
   assert.ok(await page.$eval('.task[data-id="t2"] .tm', e => e.classList.contains('late')));
+  assert.match(await page.textContent('.task[data-id="t2"] .tm'), /^💧 0\/8 · ⏰ \d\d:\d\d$/);   // water task keeps its reminder
   await page.evaluate(() => { lastRemCheck = -1; tick(); });
   await page.waitForTimeout(200);
   assert.equal((await page.evaluate(() => __n)).length, 1, 'not sent twice');
@@ -451,4 +452,29 @@ test('food tab follows the shift schedule: this week\'s shifts, meal times per d
   // shifts off → the manual choice is back
   await page.evaluate(() => { cfg.shifts.on = false; renderFoodShift(); });
   assert.ok(await page.isVisible('#shiftRow'));
+});
+
+test('"Ус уух 8 аяга" follows the water counter: taps add cups, it ticks itself at the goal', async t => {
+  const { page } = await open(t);
+  const card = page.locator('#tasks .task').nth(1);
+  assert.equal(await page.evaluate(() => cfg.tasks[1].link), 'water');       // linked automatically by its name
+  assert.equal(await page.evaluate(() => cfg.waterGoal), 8);
+  await card.click(); await card.click();
+  assert.equal(await page.textContent('#wCnt'), '2');                         // a tap on the task = one cup
+  assert.match(await card.locator('.tm').textContent(), /💧 2\/8/);
+  assert.equal(await card.getAttribute('aria-checked'), 'false');
+  await page.click('#cups .cup >> nth=7');                                    // 8 cups
+  assert.equal(await card.getAttribute('aria-checked'), 'true');
+  assert.ok(await page.evaluate(() => !!hist[dayKey(new Date())].t2));
+  await page.click('#wMinus');                                                // back under the goal → not done
+  assert.equal(await card.getAttribute('aria-checked'), 'false');
+  // unlink in settings: the task becomes an ordinary tick box again, and stays unlinked after reload
+  await page.click('#openSet');
+  await page.locator('.editbox').nth(1).locator('label.wl input').uncheck();
+  await page.click('#save');
+  await card.click();
+  assert.equal(await card.getAttribute('aria-checked'), 'true');
+  assert.equal(await page.textContent('#wCnt'), '7');
+  await page.reload();
+  assert.equal(await page.evaluate(() => cfg.tasks[1].link), '');
 });

@@ -121,6 +121,7 @@ h2{font-family:"Cormorant Garamond",serif;font-size:24px;font-weight:600;color:v
 .opts input{background:var(--bg2);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:7px 8px;font:inherit;font-size:14px;color-scheme:dark}
 .opts input[type=number]{width:62px}
 .opts input.unit{width:104px}
+.opts label.wl input{width:18px;height:18px;accent-color:#5b8fc7}
 .alldone{display:none;text-align:center;padding:14px;border-radius:14px;background:linear-gradient(135deg,#2b2214,#1d1a12);border:1px solid var(--sand2);color:var(--sand3);font-size:14px;margin-bottom:8px}
 .alldone.on{display:block}
 .alldone.pop{animation:pop .6s cubic-bezier(.2,1.6,.4,1)}
@@ -315,6 +316,7 @@ input[type=date]{background:var(--card);border:1px solid var(--line);color:var(-
 .tqty{flex:none;background:none;border:1px dashed var(--line);color:var(--mute);border-radius:10px;padding:7px 9px;font:inherit;font-size:13px;cursor:pointer;font-variant-numeric:tabular-nums;white-space:nowrap}
 .tqty.has{border-style:solid;border-color:var(--sand2);color:var(--sand3)}
 .tqin{width:78px;flex:none;background:var(--bg2);border:1px solid var(--sand2);color:var(--ink);border-radius:10px;padding:7px 8px;font:inherit;font-size:14px}
+.task.wlink .tp i{background:#5b8fc7}
 .water .cups{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
 .cup{width:30px;height:38px;padding:0;border:0;background:none;cursor:pointer;color:var(--line)}
 .cup svg{width:100%;height:100%;display:block}
@@ -674,8 +676,17 @@ const SHIFT_DEFAULT=()=>({on:false,every:7,cur:0,from:"",list:[
 cfg.tasks=cfg.tasks.filter(t=>isObj(t)&&t.id!=null&&typeof t.name==="string").map(t=>{
   const m=/(\d+)\s*(минут|мин)/i.exec(t.name);
   const min=typeof t.min==="number"&&isFinite(t.min)?Math.max(0,Math.min(600,Math.round(t.min))):(m?Math.min(600,+m[1]):0);
-  return {id:String(t.id),name:t.name,min,rem:isHM(t.rem)?t.rem:"",unit:typeof t.unit==="string"?t.unit.trim().slice(0,12):""};
+  return {id:String(t.id),name:t.name,min,rem:isHM(t.rem)?t.rem:"",unit:typeof t.unit==="string"?t.unit.trim().slice(0,12):"",link:t.link==="water"?"water":""};
 });
+// Only one task can follow the water counter.
+{let seen=false; cfg.tasks.forEach(t=>{if(t.link==="water"){if(seen)t.link="";seen=true}})}
+// Once: a task named "Ус уух … N аяга" is joined to the water counter (and gives the goal). Unlinking later is kept.
+if(!cfg.waterLinked){
+  cfg.waterLinked=true;
+  const wt=!cfg.tasks.some(t=>t.link)&&cfg.tasks.find(t=>/ус\s*уух/i.test(t.name));
+  if(wt){wt.link="water"; const g=/(\d+)\s*аяга/i.exec(wt.name); if(g&&+g[1]>=1&&+g[1]<=20&&store.get("elsen_cfg",{}).waterGoal==null) cfg.waterGoal=+g[1]}   // only if no goal was set by hand
+  store.set("elsen_cfg",cfg);
+}
 if(!isObj(hist)) hist={};
 for(const k in hist) if(!isObj(hist[k])) delete hist[k];
 // Timer state per day: {dayKey:{taskId:{acc:ms spent, run:start timestamp|null}}}
@@ -963,6 +974,10 @@ function renderTasks(){
     el.onkeydown=e=>{if(e.target===el&&(e.key===" "||e.key==="Enter")){e.preventDefault();el.click()}};
     el.innerHTML=`<div class="box"></div><div class="tx"><div class="t"></div><div class="tp" hidden><i></i></div></div><div class="tm"></div>`;
     el.querySelector(".t").textContent=t.name;
+    const wl=t.link==="water"&&cfg.waterGoal>0;
+    if(wl){ el.classList.add("wlink"); el.querySelector(".tp").hidden=false;
+      const n=water[k]||0; el.querySelector(".tp i").style.width=Math.min(100,n/cfg.waterGoal*100)+"%";
+      el.setAttribute("aria-label",`${t.name}: ${n}/${cfg.waterGoal} аяга. Дарж нэг аяга нэмнэ`) }
     if(t.unit) el.appendChild(qtyButton(t,k));
     if(t.min>0&&!done[t.id]){
       const r=document.createElement("button"); r.className="treset"; r.textContent="↺"; r.hidden=true;
@@ -973,6 +988,7 @@ function renderTasks(){
       el.append(r,b);
     }
     el.onclick=()=>{
+      if(wl){ $("wPlus").click(); return }                 // water task: a tap is one more cup; it ticks itself at the goal
       const d=todayDone();
       if(d[t.id]) delete d[t.id];
       else { buzz(15); d[t.id]=hhmm(new Date()); const s=(tm[k]||{})[t.id]; if(s&&s.run){s.acc+=Date.now()-s.run;s.run=null;saveTm();updateWakeLock()} }
@@ -1098,7 +1114,15 @@ const CUP=`<svg viewBox="0 0 30 38" aria-hidden="true"><path class="fill" d="M7.
 function setWater(n){
   const k=dayKey(new Date()); n=Math.max(0,Math.min(99,n));
   if(n) water[k]=n; else delete water[k];
-  store.set("elsen_water",water); renderWater();
+  store.set("elsen_water",water); renderWater(); syncWaterTask();
+}
+// The linked task is done exactly when today's cups reach the goal.
+function syncWaterTask(){
+  const t=cfg.waterGoal>0&&cfg.tasks.find(x=>x.link==="water"); if(!t) return;
+  const k=dayKey(new Date()), d=hist[k]||(hist[k]={}), full=(water[k]||0)>=cfg.waterGoal;
+  if(full===!!d[t.id]){ renderTasks(); return }
+  if(full) d[t.id]=hhmm(new Date()); else delete d[t.id];
+  store.set("elsen_hist",hist); renderTasks(); renderWeek();
 }
 function renderWater(){
   const g=cfg.waterGoal; $("waterSec").hidden=!g; if(!g) return;
@@ -1178,8 +1202,9 @@ function updateTaskTimers(){
     const s=(tm[k]||{})[t.id], goal=t.min*60000, p=s?tmProg(s):0, running=!!(s&&s.run);
     el.classList.toggle("running",running);
     const tp=el.querySelector(".tp");
-    tp.hidden=!(t.min>0&&!done[t.id]&&(running||(p>0&&p<goal)));
-    tp.firstChild.style.width=Math.min(100,goal?p/goal*100:0)+"%";
+    if(t.link==="water"&&cfg.waterGoal>0){ tp.hidden=!!done[t.id]; tp.firstChild.style.width=Math.min(100,(water[k]||0)/cfg.waterGoal*100)+"%" }
+    else { tp.hidden=!(t.min>0&&!done[t.id]&&(running||(p>0&&p<goal)));
+      tp.firstChild.style.width=Math.min(100,goal?p/goal*100:0)+"%"; }
     const b=el.querySelector(".tbtn"), rs=el.querySelector(".treset");
     if(rs) rs.hidden=running||!(p>0&&p<goal);
     if(b){
@@ -1190,6 +1215,8 @@ function updateTaskTimers(){
     const tmEl=el.querySelector(".tm");
     tmEl.textContent=done[t.id]||""; tmEl.className="tm";
     if(typeof reminderLabel==="function") reminderLabel(t,done,tmEl);
+    // water task: cups so far, plus its reminder if it has one
+    if(t.link==="water"&&cfg.waterGoal>0&&!done[t.id]){const r=tmEl.textContent; tmEl.textContent=`💧 ${water[k]||0}/${cfg.waterGoal}`+(r?` · ${r}`:"")}
   });
 }
 
@@ -1349,7 +1376,11 @@ function renderEdit(){
     const ui=document.createElement("input"); ui.type="text"; ui.className="unit"; ui.maxLength=12; ui.placeholder="км, хуудас…"; ui.value=t.unit||"";
     ui.setAttribute("aria-label","Бүртгэх нэгж: "+(t.name||"зүйл")); ui.oninput=e=>t.unit=e.target.value;
     lu.appendChild(ui); o.appendChild(lu);
+    const lw=document.createElement("label"); lw.className="wl"; lw.innerHTML=`<input type="checkbox"><span>💧 Устай холбох</span>`;
+    const wc=lw.querySelector("input"); wc.checked=t.link==="water"; wc.setAttribute("aria-label","Ус тоологчтой холбох: "+(t.name||"зүйл"));
+    wc.onchange=()=>{draft.forEach(x=>{if(x!==t&&wc.checked)x.link=""}); t.link=wc.checked?"water":""; renderEdit()};
     if(typeof remEditor==="function") o.appendChild(remEditor(t));
+    o.appendChild(lw);
     const mv=document.createElement("div"); mv.className="mv";
     [["↑",-1,"Дээш"],["↓",1,"Доош"]].forEach(([s,d,lab])=>{
       const x=document.createElement("button"); x.textContent=s; x.setAttribute("aria-label",lab+": "+(t.name||"зүйл"));
@@ -1364,18 +1395,18 @@ function renderEdit(){
 $("openSet").onclick=openSettings;
 $("close").onclick=closeSettings;
 $("sheet").onclick=e=>{if(e.target.id==="sheet")closeSettings()};
-$("addTask").onclick=()=>{draft.push({id:"t"+Date.now(),name:"",min:0,rem:"",unit:""});renderEdit();const ins=$("editList").querySelectorAll("input.nm");ins[ins.length-1].focus()};
+$("addTask").onclick=()=>{draft.push({id:"t"+Date.now(),name:"",min:0,rem:"",unit:"",link:""});renderEdit();const ins=$("editList").querySelectorAll("input.nm");ins[ins.length-1].focus()};
 $("save").onclick=()=>{
   ["dayStart","sleepS","sleepE","workS","workE"].forEach(id=>{if($(id).value)cfg[id]=$(id).value});
   shDraft.list=shDraft.list.filter(x=>x.name.trim()).map(x=>({...x,name:x.name.trim()}));
   shDraft.on=shDraft.on&&shDraft.list.length>0; shDraft.cur=Math.min(shDraft.cur,Math.max(0,shDraft.list.length-1));
   cfg.shifts=shDraft;
-  cfg.tasks=draft.filter(t=>t.name.trim()).map(t=>({id:t.id,name:t.name.trim(),min:t.min||0,rem:t.rem||"",unit:(t.unit||"").trim().slice(0,12)}));
+  cfg.tasks=draft.filter(t=>t.name.trim()).map(t=>({id:t.id,name:t.name.trim(),min:t.min||0,rem:t.rem||"",unit:(t.unit||"").trim().slice(0,12),link:t.link==="water"?"water":""}));
   cfg.sound=$("soundOn").checked;
   cfg.sandSound=$("sandOn").checked; if(cfg.sandSound) unlockAudio();
   {const w=parseInt($("waterGoalIn").value,10); if(w>=0&&w<=20) cfg.waterGoal=w}
   store.set("elsen_cfg",cfg); lastRemCheck=-1; lastKey=dayKey(new Date());
-  closeSettings(); drawBar(); renderTasks(); renderWeek(); tick(); sandSoundSync(); renderFoodShift(); renderPlan();
+  closeSettings(); drawBar(); renderTasks(); renderWeek(); tick(); sandSoundSync(); renderFoodShift(); renderPlan(); syncWaterTask();
   toast("Хадгаллаа ✓");
 };
 
