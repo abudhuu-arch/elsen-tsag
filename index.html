@@ -279,6 +279,13 @@ select{background:var(--card);border:1px solid var(--line);color:var(--ink);bord
 .shbox .edit{display:flex;gap:8px;margin-bottom:8px}
 .shbox .row{margin-bottom:6px}
 input[type=date]{background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:9px 10px;font:inherit;font-size:14px;color-scheme:dark;min-height:38px}
+/* evening review */
+.rates{display:flex;gap:6px;margin-bottom:10px}
+.rates button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:9px 0 7px;color:var(--mute);font:inherit;font-size:10.5px;letter-spacing:-.2px;cursor:pointer;min-width:0;overflow:hidden;white-space:nowrap}
+.rates button span{font-size:22px;line-height:1;filter:grayscale(1);opacity:.6;transition:.2s}
+.rates button[aria-checked=true]{border-color:var(--sand);color:var(--sand3);background:#2a2219}
+.rates button[aria-checked=true] span{filter:none;opacity:1;transform:scale(1.12)}
+#revNote{width:100%}
 /* water */
 .tqty{flex:none;background:none;border:1px dashed var(--line);color:var(--mute);border-radius:10px;padding:7px 9px;font:inherit;font-size:13px;cursor:pointer;font-variant-numeric:tabular-nums;white-space:nowrap}
 .tqty.has{border-style:solid;border-color:var(--sand2);color:var(--sand3)}
@@ -417,6 +424,15 @@ input[type=time]::-webkit-date-and-time-value{text-align:left}
     <div class="alldone" id="alldone">Бүгдийг хийлээ. Өнөөдрийн элс дэмий урсаагүй.</div>
     <div id="tasks"></div>
     <div class="small" id="remHint" style="text-align:center" hidden>⏰ Сануулга зөвхөн апп нээлттэй үед ирнэ</div>
+  </section>
+
+  <section id="reviewSec" hidden>
+    <div class="sh"><h2>Өдрийн тойм</h2><div class="count" id="revWhen"></div></div>
+    <div class="card review">
+      <div class="small" style="margin:0 0 10px">Өнөөдөр ямар өдөр байв?</div>
+      <div class="rates" id="rates" role="radiogroup" aria-label="Өдрийн үнэлгээ"></div>
+      <input type="text" id="revNote" maxlength="140" placeholder="Нэг мөр тэмдэглэл: юу сайн болов, юуг сайжруулах вэ" enterkeyhint="done" autocomplete="off">
+    </div>
   </section>
 
   <section id="waterSec">
@@ -929,6 +945,7 @@ function renderTasks(){
   allDoneState={k,all};
   updateTaskTimers();
   if(typeof renderWater==="function") renderWater();
+  if(typeof renderReview==="function") renderReview();
 }
 /* ---------- amounts logged on tasks (km run, pages read, reps…) ---------- */
 let qty=store.get("elsen_qty",{});
@@ -959,6 +976,34 @@ function qtyButton(t,k){
     b.replaceWith(i); i.focus();
   };
   return b;
+}
+
+/* ---------- evening review: 1–5 and one line ---------- */
+let review=store.get("elsen_review",{});
+if(!isObj(review)) review={};
+for(const k in review){const v=review[k]; if(!isObj(v)||!(v.r>=1&&v.r<=5)){delete review[k];continue}
+  review[k]={r:Math.round(v.r),n:typeof v.n==="string"?v.n.slice(0,140):""}}
+const RATES=[["😣","Муу"],["😕","Тааруу"],["😐","Дунд"],["🙂","Сайн"],["🤩","Гайхалтай"]];
+(function(){const box=$("rates");
+  RATES.forEach(([e,l],i)=>{const b=document.createElement("button"); b.setAttribute("role","radio"); b.innerHTML=`<span>${e}</span>${l}`;
+    b.setAttribute("aria-label",`${i+1}: ${l}`);
+    b.onclick=()=>{const k=dayKey(new Date()), v=review[k];
+      if(v&&v.r===i+1&&!v.n) delete review[k]; else review[k]={r:i+1,n:v?v.n:$("revNote").value.trim().slice(0,140)};
+      buzz(12); store.set("elsen_review",review); renderReview()};
+    box.appendChild(b)})})();
+$("revNote").onchange=$("revNote").onblur=()=>{
+  const k=dayKey(new Date()), n=$("revNote").value.trim().slice(0,140), v=review[k];
+  if(!v){ if(n) toast("Эхлээд үнэлгээгээ сонгоно уу"); return }
+  if(v.n!==n){v.n=n; store.set("elsen_review",review); toast("Тойм хадгалагдлаа ✓")}
+};
+$("revNote").onkeydown=e=>{if(e.key==="Enter")e.target.blur()};
+// Shown in the last 6 hours of the day (the evening, whatever the shift), or once something is saved.
+function renderReview(){
+  const n=new Date(), {k,end}=dayBounds(n), v=review[k], show=!!v||end-n<=6*3600000;
+  $("reviewSec").hidden=!show; if(!show) return;
+  $("rates").querySelectorAll("button").forEach((b,i)=>b.setAttribute("aria-checked",!!v&&v.r===i+1));
+  if(document.activeElement!==$("revNote")) $("revNote").value=v?v.n:"";
+  $("revWhen").textContent=v?"✓ Хадгалсан":"";
 }
 
 /* ---------- water: cups per day ---------- */
@@ -1130,7 +1175,7 @@ function renderWeek(){
 }
 
 /* ---------- tick ---------- */
-let lastKey=dayKey(new Date());
+let lastKey=dayKey(new Date()), lastMin=-1;
 function tick(){
   checkTimers();
   if(typeof checkReminders==="function") checkReminders();
@@ -1160,6 +1205,7 @@ function tick(){
   $("nextBlock").textContent=nx?NAMES[nx.b]:"—";
   if(nx){const t=(Math.floor(m)+nx.at)%1440;$("nextSub").textContent=`${pad(Math.floor(t/60))}:${pad(t%60)}-д`}
 
+  if(n.getMinutes()!==lastMin){lastMin=n.getMinutes(); if(typeof renderReview==="function") renderReview()}
   $("date").textContent=`${n.getFullYear()} оны ${MONTHS[n.getMonth()]}ын ${n.getDate()}, ${WD[n.getDay()]}`;
   const k=dayKey(n);
   if(k!==lastKey){ // new day: hourglass flips, list resets
@@ -1573,6 +1619,7 @@ function renderStats(){
 function dayExtras(k){
   const out=[];
   if(water[k]) out.push(`💧 ${water[k]} аяга ус`);
+  if(review[k]) out.push(`${RATES[review[k].r-1][0]} ${review[k].r}/5`+(review[k].n?` · «${review[k].n}»`:""));
   return out;
 }
 // Month averages of the extra logs; a tile appears only when there is something to show.
@@ -1580,6 +1627,8 @@ function renderMore(counted,today){
   const tiles=[], tile=(k,v,sub)=>`<div class="tile"><div class="k">${k}</div><div class="v">${v}${sub?`<small>${sub}</small>`:""}</div></div>`;
   const wd=counted.filter(x=>water[x.k]);
   if(wd.length) tiles.push(tile("Ус · өдрийн дундаж",(wd.reduce((a,x)=>a+water[x.k],0)/wd.length).toFixed(1).replace(/\.0$/,""),"аяга"));
+  const rd=counted.filter(x=>review[x.k]);
+  if(rd.length) tiles.push(tile("Өдрийн үнэлгээ",(rd.reduce((a,x)=>a+review[x.k].r,0)/rd.length).toFixed(1),`/ 5 · ${rd.length} өдөр`));
   $("moreTiles").innerHTML=tiles.join(""); $("moreSec").hidden=!tiles.length;
 }
 $("mPrev").onclick=()=>{if(--statM<0){statM=11;statY--} statSel=null; renderStats()};
@@ -1820,7 +1869,7 @@ $("installBtn").onclick=async()=>{if(!installEvt)return;installEvt.prompt();try{
 renderInstall();
 
 /* ---------- backup: everything lives only on this phone, so let people keep a copy ---------- */
-const DATA_KEYS=["elsen_cfg","elsen_hist","elsen_tm","elsen_snap","elsen_sw","elsen_pantry","elsen_foodcfg","elsen_plan","elsen_water","elsen_qty"];
+const DATA_KEYS=["elsen_cfg","elsen_hist","elsen_tm","elsen_snap","elsen_sw","elsen_pantry","elsen_foodcfg","elsen_plan","elsen_water","elsen_qty","elsen_review"];
 function backupData(){
   const data={};
   DATA_KEYS.forEach(k=>{try{const v=localStorage.getItem(k); if(v!=null) data[k]=JSON.parse(v)}catch(e){}});

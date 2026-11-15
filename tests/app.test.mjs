@@ -33,6 +33,7 @@ after(async () => { await browser?.close(); server?.close(); });
 async function open(t, seed, opts = {}) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, permissions: ['notifications', 'clipboard-read', 'clipboard-write'], acceptDownloads: true, ...(opts.mobile ? { isMobile: true, hasTouch: true, deviceScaleFactor: 3 } : {}), ...(opts.tz ? { timezoneId: opts.tz } : {}) });
   const page = await ctx.newPage();
+  if (opts.time) await page.clock.setFixedTime(opts.time);     // Date fixed, timers still run
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
@@ -366,4 +367,22 @@ test('task amounts: log km on a task, shown in day details and month total', asy
   await page.click('nav.tabs button[data-v="v-day"]');
   await card.locator('.tqty').click(); await card.locator('.tqin').fill(''); await card.locator('.tqin').press('Enter');
   assert.equal(await card.locator('.tqty').textContent(), '+ км');
+});
+
+test('evening review: hidden by day, shown in the evening, rating + note saved and in stats', async t => {
+  const day = new Date(); day.setHours(11, 0, 0, 0);
+  const { page: p1 } = await open(t, null, { time: day });
+  assert.ok(!(await p1.isVisible('#reviewSec')));
+  const eve = new Date(); eve.setHours(20, 30, 0, 0);
+  const { page } = await open(t, null, { time: eve });
+  assert.ok(await page.isVisible('#reviewSec'));
+  await page.click('#rates button >> nth=3');
+  await page.fill('#revNote', 'Гүйлт сайхан байлаа');
+  await page.press('#revNote', 'Enter');
+  const r = await page.evaluate(() => review[dayKey(new Date())]);
+  assert.deepEqual(r, { r: 4, n: 'Гүйлт сайхан байлаа' });
+  assert.equal(await page.getAttribute('#rates button >> nth=3', 'aria-checked'), 'true');
+  await page.click('nav.tabs button[data-v="v-stat"]');
+  assert.match(await page.textContent('#dayInfo'), /4\/5 · «Гүйлт сайхан байлаа»/);
+  assert.match(await page.textContent('#moreTiles'), /Өдрийн үнэлгээ\s*4\.0/);
 });
