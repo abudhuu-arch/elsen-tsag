@@ -386,3 +386,18 @@ test('evening review: hidden by day, shown in the evening, rating + note saved a
   assert.match(await page.textContent('#dayInfo'), /4\/5 · «Гүйлт сайхан байлаа»/);
   assert.match(await page.textContent('#moreTiles'), /Өдрийн үнэлгээ\s*4\.0/);
 });
+
+test('sleep log: times give the duration, 7-day average, stats', async t => {
+  const prev = { [keyAgo(1)]: { s: '22:00', w: '06:00' }, [keyAgo(2)]: { s: '00:30', w: '07:30' }, [keyAgo(9)]: { s: '20:00', w: '10:00' } };
+  const { page } = await open(t, `()=>{localStorage.elsen_sleep=${JSON.stringify(JSON.stringify(prev))}}`);
+  await page.fill('#slS', '23:30'); await page.dispatchEvent('#slS', 'change');
+  assert.equal(await page.textContent('#slDur'), '—');               // only one time so far
+  await page.fill('#slW', '06:45'); await page.dispatchEvent('#slW', 'change');
+  assert.equal(await page.textContent('#slDur'), '7ц 15м');           // across midnight
+  // 7 h 15 m, 8 h, 7 h → 7 h 25 m; the night 9 days ago is outside the week
+  assert.equal(await page.textContent('#slAvg'), '7 хоногт дунджаар 7ц 25м');
+  assert.ok(!(await page.isVisible('#slNow')));
+  await page.click('nav.tabs button[data-v="v-stat"]');
+  assert.match(await page.textContent('#dayInfo'), /😴 7ц 15м \(23:30–06:45\)/);
+  assert.match(await page.textContent('#moreTiles'), /Нойр · дундаж/);
+});

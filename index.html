@@ -286,6 +286,12 @@ input[type=date]{background:var(--card);border:1px solid var(--line);color:var(-
 .rates button[aria-checked=true]{border-color:var(--sand);color:var(--sand3);background:#2a2219}
 .rates button[aria-checked=true] span{filter:none;opacity:1;transform:scale(1.12)}
 #revNote{width:100%}
+/* sleep */
+.slrow{display:flex;gap:10px;align-items:flex-end}
+.slrow label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--mute);flex:1;min-width:0}
+.slrow input{width:100%;min-width:0}
+.sldur{flex:none;min-width:74px;text-align:right;font-family:"Cormorant Garamond",serif;font-size:26px;font-weight:600;color:var(--ink);font-variant-numeric:lining-nums tabular-nums;padding-bottom:4px}
+#slNow{margin-top:10px}
 /* water */
 .tqty{flex:none;background:none;border:1px dashed var(--line);color:var(--mute);border-radius:10px;padding:7px 9px;font:inherit;font-size:13px;cursor:pointer;font-variant-numeric:tabular-nums;white-space:nowrap}
 .tqty.has{border-style:solid;border-color:var(--sand2);color:var(--sand3)}
@@ -432,6 +438,18 @@ input[type=time]::-webkit-date-and-time-value{text-align:left}
       <div class="small" style="margin:0 0 10px">Өнөөдөр ямар өдөр байв?</div>
       <div class="rates" id="rates" role="radiogroup" aria-label="Өдрийн үнэлгээ"></div>
       <input type="text" id="revNote" maxlength="140" placeholder="Нэг мөр тэмдэглэл: юу сайн болов, юуг сайжруулах вэ" enterkeyhint="done" autocomplete="off">
+    </div>
+  </section>
+
+  <section id="sleepSec">
+    <div class="sh"><h2>Нойр</h2><div class="count" id="slAvg"></div></div>
+    <div class="card sleep">
+      <div class="slrow">
+        <label><span>😴 Унтсан</span><input type="time" id="slS"></label>
+        <label><span>☀️ Боссон</span><input type="time" id="slW"></label>
+        <div class="sldur" id="slDur">—</div>
+      </div>
+      <button class="btn" id="slNow">☀️ Одоо бослоо</button>
     </div>
   </section>
 
@@ -946,6 +964,7 @@ function renderTasks(){
   updateTaskTimers();
   if(typeof renderWater==="function") renderWater();
   if(typeof renderReview==="function") renderReview();
+  if(typeof renderSleep==="function") renderSleep();
 }
 /* ---------- amounts logged on tasks (km run, pages read, reps…) ---------- */
 let qty=store.get("elsen_qty",{});
@@ -1005,6 +1024,41 @@ function renderReview(){
   if(document.activeElement!==$("revNote")) $("revNote").value=v?v.n:"";
   $("revWhen").textContent=v?"✓ Хадгалсан":"";
 }
+
+/* ---------- sleep: when you fell asleep and woke up; saved on the day you woke ---------- */
+let sleepLog=store.get("elsen_sleep",{});
+if(!isObj(sleepLog)) sleepLog={};
+for(const k in sleepLog){const v=sleepLog[k]; if(!isObj(v)||!isHM(v.s)||!isHM(v.w)) delete sleepLog[k]; else sleepLog[k]={s:v.s,w:v.w}}
+const sleepMin=v=>v?((toMin(v.w)-toMin(v.s))%1440+1440)%1440:0;
+let slDraft={};
+function saveSleep(){
+  const k=dayKey(new Date()), s=$("slS").value, w=$("slW").value;
+  slDraft={s,w};
+  if(isHM(s)&&isHM(w)&&s!==w){ sleepLog[k]={s,w}; store.set("elsen_sleep",sleepLog) }
+  else if(!s&&!w&&sleepLog[k]){ delete sleepLog[k]; store.set("elsen_sleep",sleepLog) }
+  renderSleep();
+}
+// average over the last 7 days that have a record (today included)
+function sleepAvg(endKey,days){
+  let sum=0,n=0; for(let i=0;i<days;i++){const v=sleepLog[addDays(endKey,-i)]; if(v){sum+=sleepMin(v);n++}}
+  return n?{min:sum/n,n}:null;
+}
+function renderSleep(){
+  const k=dayKey(new Date()), v=sleepLog[k];
+  if(document.activeElement!==$("slS")) $("slS").value=v?v.s:(slDraft.k===k&&slDraft.s)||"";
+  if(document.activeElement!==$("slW")) $("slW").value=v?v.w:(slDraft.k===k&&slDraft.w)||"";
+  $("slDur").textContent=v?fmtDur(sleepMin(v)):"—";
+  const a=sleepAvg(k,7);
+  $("slAvg").textContent=a?`7 хоногт дунджаар ${fmtDur(a.min)}`:"";
+  $("slNow").hidden=!!(v&&v.w);
+}
+$("slS").onchange=()=>{slDraft.k=dayKey(new Date()); saveSleep()};
+$("slW").onchange=()=>{slDraft.k=dayKey(new Date()); saveSleep()};
+$("slNow").onclick=()=>{
+  $("slW").value=hhmm(new Date()); slDraft.k=dayKey(new Date());
+  if(!$("slS").value){ const sc=sch(); $("slS").value=`${pad(Math.floor(sc.sleepS/60))}:${pad(sc.sleepS%60)}`; toast("Унтсан цагийг хуваариас бөглөлөө, зөв эсэхийг шалгана уу") }
+  saveSleep(); buzz(12);
+};
 
 /* ---------- water: cups per day ---------- */
 let water=store.get("elsen_water",{});
@@ -1618,6 +1672,7 @@ function renderStats(){
 // Extra things logged on a day (water, sleep, rating…): one short text each, for the day details.
 function dayExtras(k){
   const out=[];
+  if(sleepLog[k]) out.push(`😴 ${fmtDur(sleepMin(sleepLog[k]))} (${sleepLog[k].s}–${sleepLog[k].w})`);
   if(water[k]) out.push(`💧 ${water[k]} аяга ус`);
   if(review[k]) out.push(`${RATES[review[k].r-1][0]} ${review[k].r}/5`+(review[k].n?` · «${review[k].n}»`:""));
   return out;
@@ -1627,6 +1682,9 @@ function renderMore(counted,today){
   const tiles=[], tile=(k,v,sub)=>`<div class="tile"><div class="k">${k}</div><div class="v">${v}${sub?`<small>${sub}</small>`:""}</div></div>`;
   const wd=counted.filter(x=>water[x.k]);
   if(wd.length) tiles.push(tile("Ус · өдрийн дундаж",(wd.reduce((a,x)=>a+water[x.k],0)/wd.length).toFixed(1).replace(/\.0$/,""),"аяга"));
+  const sd=counted.filter(x=>sleepLog[x.k]);
+  if(sd.length){const m=Math.round(sd.reduce((a,x)=>a+sleepMin(sleepLog[x.k]),0)/sd.length);
+    tiles.push(tile("Нойр · дундаж",Math.floor(m/60),`ц ${m%60}м · ${sd.length} шөнө`))}
   const rd=counted.filter(x=>review[x.k]);
   if(rd.length) tiles.push(tile("Өдрийн үнэлгээ",(rd.reduce((a,x)=>a+review[x.k].r,0)/rd.length).toFixed(1),`/ 5 · ${rd.length} өдөр`));
   $("moreTiles").innerHTML=tiles.join(""); $("moreSec").hidden=!tiles.length;
@@ -1869,7 +1927,7 @@ $("installBtn").onclick=async()=>{if(!installEvt)return;installEvt.prompt();try{
 renderInstall();
 
 /* ---------- backup: everything lives only on this phone, so let people keep a copy ---------- */
-const DATA_KEYS=["elsen_cfg","elsen_hist","elsen_tm","elsen_snap","elsen_sw","elsen_pantry","elsen_foodcfg","elsen_plan","elsen_water","elsen_qty","elsen_review"];
+const DATA_KEYS=["elsen_cfg","elsen_hist","elsen_tm","elsen_snap","elsen_sw","elsen_pantry","elsen_foodcfg","elsen_plan","elsen_water","elsen_qty","elsen_review","elsen_sleep"];
 function backupData(){
   const data={};
   DATA_KEYS.forEach(k=>{try{const v=localStorage.getItem(k); if(v!=null) data[k]=JSON.parse(v)}catch(e){}});
