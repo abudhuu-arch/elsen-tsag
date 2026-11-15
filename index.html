@@ -278,8 +278,22 @@ select{background:var(--card);border:1px solid var(--line);color:var(--ink);bord
 .shbox .edit{display:flex;gap:8px;margin-bottom:8px}
 .shbox .row{margin-bottom:6px}
 input[type=date]{background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:9px 10px;font:inherit;font-size:14px;color-scheme:dark;min-height:38px}
+/* water */
+.water .cups{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+.cup{width:30px;height:38px;padding:0;border:0;background:none;cursor:pointer;color:var(--line)}
+.cup svg{width:100%;height:100%;display:block}
+.cup .fill{fill:#5b8fc7;opacity:0;transition:opacity .25s}
+.cup.on{color:#7fa9d6}.cup.on .fill{opacity:1}
+.cup.extra{color:#7fa9d6}
+.wbtns{display:flex;gap:8px;margin-top:12px}
+.wbtns button{border-radius:12px;border:1px solid var(--line);background:var(--bg2);color:var(--ink);font:inherit;font-weight:600;font-size:15px;padding:11px;cursor:pointer}
+.wminus{width:52px}.wplus{flex:1;border-color:#5b8fc7!important;color:#a9c8ea!important}
+.wplus:active{transform:scale(.98)}
+.dx{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:13px;color:var(--mute);padding:4px 0 8px;border-bottom:1px solid var(--line);margin-bottom:6px}
+.dx:empty{display:none}
 .pair2{display:flex;gap:8px}.pair2 .btn{flex:1}
 textarea{width:100%;background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:9px 10px;font:12px/1.4 ui-monospace,Menlo,monospace;resize:vertical;margin-top:8px}
+.row label small.hint{display:block;font-size:11px;color:var(--dim)}
 .switch small.hint{display:block;font-size:11px;color:var(--dim);margin-top:2px}
 .switch input{position:absolute;opacity:0;width:1px;height:1px}
 .switch i{flex:none;width:44px;height:26px;border-radius:13px;background:var(--line);position:relative;transition:.2s}
@@ -401,6 +415,14 @@ input[type=time]::-webkit-date-and-time-value{text-align:left}
     <div class="small" id="remHint" style="text-align:center" hidden>⏰ Сануулга зөвхөн апп нээлттэй үед ирнэ</div>
   </section>
 
+  <section id="waterSec">
+    <div class="sh"><h2>Ус</h2><div class="count"><b id="wCnt">0</b> / <span id="wGoal">8</span> аяга</div></div>
+    <div class="card water">
+      <div class="cups" id="cups"></div>
+      <div class="wbtns"><button class="wminus" id="wMinus" aria-label="Нэг аяга хасах">−</button><button class="wplus" id="wPlus">💧 +1 аяга</button></div>
+    </div>
+  </section>
+
   <section>
     <div class="sh"><h2>Сүүлийн 7 хоног</h2></div>
     <div class="week" id="week"></div>
@@ -448,6 +470,10 @@ input[type=time]::-webkit-date-and-time-value{text-align:left}
       </div>
       <div class="card" id="dayInfo"></div>
     </section>
+    <section id="moreSec" hidden>
+      <div class="sh"><h2>Бусад үзүүлэлт</h2></div>
+      <div class="tiles" id="moreTiles"></div>
+    </section>
     <section>
       <div class="sh"><h2>Даалгавар тус бүр</h2></div>
       <div class="card" id="perTask"></div>
@@ -493,6 +519,7 @@ input[type=time]::-webkit-date-and-time-value{text-align:left}
   <div class="panel" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
     <h3 id="sheetTitle" tabindex="-1">Тохиргоо</h3>
     <div class="row"><label>Өдөр эхлэх цаг</label><input type="time" id="dayStart"></div>
+    <div class="row"><label for="waterGoalIn">💧 Өдөрт уух ус <small class="hint">0 бол нуух</small></label><div class="pair"><input type="number" id="waterGoalIn" min="0" max="20" inputmode="numeric" style="width:70px">аяга</div></div>
     <label class="switch"><span>🔁 Ээлжээр ажилладаг <small class="hint">Унтах, ажлын цаг ээлжээр автоматаар солигдоно</small></span><input type="checkbox" id="shiftOn"><i aria-hidden="true"></i></label>
     <div id="fixedSch">
       <div class="row"><label>Унтах</label><div class="pair"><input type="time" id="sleepS">–<input type="time" id="sleepE"></div></div>
@@ -565,6 +592,7 @@ const isObj=o=>!!o&&typeof o==="object"&&!Array.isArray(o);
 ["dayStart","sleepS","sleepE","workS","workE"].forEach(k=>{if(!isHM(cfg[k]))cfg[k]=DEFAULT[k]});
 if(!Array.isArray(cfg.tasks)) cfg.tasks=DEFAULT.tasks;
 cfg.sandSound=cfg.sandSound===true;          // off unless turned on
+cfg.waterGoal=Number.isFinite(+cfg.waterGoal)&&cfg.waterGoal!==null&&cfg.waterGoal!==""?Math.max(0,Math.min(20,Math.round(+cfg.waterGoal))):8;
 // Shift rotation: shifts take turns every `every` days; `cur` was running on day `from`.
 const SHIFT_DEFAULT=()=>({on:false,every:7,cur:0,from:"",list:[
   {id:"s1",name:"Өглөөний ээлж",workS:"06:00",workE:"14:00",sleepS:"22:00",sleepE:"05:00"},
@@ -895,7 +923,34 @@ function renderTasks(){
   if(all&&allDoneState.k===k&&allDoneState.all===false) celebrate();
   allDoneState={k,all};
   updateTaskTimers();
+  if(typeof renderWater==="function") renderWater();
 }
+/* ---------- water: cups per day ---------- */
+let water=store.get("elsen_water",{});
+if(!isObj(water)) water={}; for(const k in water) if(!(Number.isFinite(water[k])&&water[k]>=0)) delete water[k]; else water[k]=Math.min(99,Math.round(water[k]));
+const CUP=`<svg viewBox="0 0 30 38" aria-hidden="true"><path class="fill" d="M7.6 16h14.8l-1.6 17.2a2 2 0 0 1-2 1.8h-7.6a2 2 0 0 1-2-1.8z"/><path d="M5 4h20l-2.6 29.4A3 3 0 0 1 19.4 36h-8.8a3 3 0 0 1-3-2.6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>`;
+function setWater(n){
+  const k=dayKey(new Date()); n=Math.max(0,Math.min(99,n));
+  if(n) water[k]=n; else delete water[k];
+  store.set("elsen_water",water); renderWater();
+}
+function renderWater(){
+  const g=cfg.waterGoal; $("waterSec").hidden=!g; if(!g) return;
+  const n=water[dayKey(new Date())]||0, box=$("cups");
+  $("wCnt").textContent=n; $("wGoal").textContent=g;
+  if(box.children.length!==Math.max(g,n)){
+    box.innerHTML="";
+    for(let i=0;i<Math.max(g,n);i++){const b=document.createElement("button"); b.className="cup"; b.innerHTML=CUP;
+      b.onclick=()=>{const cur=water[dayKey(new Date())]||0; buzz(10); setWater(cur===i+1?i:i+1)};   // tap a cup to fill up to it; tap the last one to undo
+      box.appendChild(b)}
+  }
+  [...box.children].forEach((b,i)=>{b.classList.toggle("on",i<n); b.classList.toggle("extra",i>=g);
+    b.setAttribute("aria-label",`${i+1} аяга`+(i<n?" (уусан)":"")); b.setAttribute("aria-pressed",i<n)});
+  $("wMinus").disabled=!n;
+}
+$("wPlus").onclick=()=>{const n=(water[dayKey(new Date())]||0)+1; buzz(n===cfg.waterGoal?[30,40,60]:12); setWater(n); if(n===cfg.waterGoal) toast("💧 Өнөөдрийн ус бүрэн уугдлаа")};
+$("wMinus").onclick=()=>setWater((water[dayKey(new Date())]||0)-1);
+
 // A day is scored against the tasks it had (snapshot); days before snapshots existed use today's list.
 function scoreFor(k){const ids=snap[k]||cfg.tasks.map(t=>t.id), d=hist[k]||{};return{c:ids.filter(id=>d[id]).length,tot:ids.length}}
 
@@ -1083,6 +1138,7 @@ function openSettings(){
   ["dayStart","sleepS","sleepE","workS","workE"].forEach(id=>$(id).value=cfg[id]);
   $("soundOn").checked=cfg.sound!==false;
   $("sandOn").checked=cfg.sandSound;
+  $("waterGoalIn").value=cfg.waterGoal;
   shDraft=JSON.parse(JSON.stringify(cfg.shifts));
   if(!shDraft.from){shDraft.from=dayKey(new Date()); if(shDraft.every===7) shDraft.from=addDays(shDraft.from,-((dayDate(shDraft.from).getDay()+6)%7))}
   // show the shift that is running today, counted from today
@@ -1145,6 +1201,7 @@ $("save").onclick=()=>{
   cfg.tasks=draft.filter(t=>t.name.trim()).map(t=>({id:t.id,name:t.name.trim(),min:t.min||0,rem:t.rem||""}));
   cfg.sound=$("soundOn").checked;
   cfg.sandSound=$("sandOn").checked; if(cfg.sandSound) unlockAudio();
+  {const w=parseInt($("waterGoalIn").value,10); if(w>=0&&w<=20) cfg.waterGoal=w}
   store.set("elsen_cfg",cfg); lastRemCheck=-1; lastKey=dayKey(new Date());
   closeSettings(); drawBar(); renderTasks(); renderWeek(); tick(); sandSoundSync();
   toast("Хадгаллаа ✓");
@@ -1437,7 +1494,8 @@ function renderStats(){
     const [sy,sm,sd]=statSel.split("-").map(Number), wd=new Date(sy,sm-1,sd).getDay();
     const s=scoreFor(statSel), done=hist[statSel]||{}, ids=snap[statSel]||cfg.tasks.map(t=>t.id), dmin=dayMinutes(statSel);
     const nameOf=id=>{const t=cfg.tasks.find(x=>x.id===id);return t?t.name:"(устгасан зүйл)"};
-    info.innerHTML=`<div class="dh"><b>${MONTHS[sm-1]}ын ${sd}, ${WD_FULL[wd]}</b><span>${s.c}/${s.tot}${dmin>=1?` · ⏱ ${fmtDur(dmin)}`:""}</span></div>`;
+    info.innerHTML=`<div class="dh"><b>${MONTHS[sm-1]}ын ${sd}, ${WD_FULL[wd]}</b><span>${s.c}/${s.tot}${dmin>=1?` · ⏱ ${fmtDur(dmin)}`:""}</span></div><div class="dx"></div>`;
+    const dx=info.querySelector(".dx"); dayExtras(statSel).forEach(x=>{const e=document.createElement("span"); e.textContent=x; dx.appendChild(e)});
     ids.forEach(id=>{
       const r=document.createElement("div"); r.className="di "+(done[id]?"ok":"no");
       const sp=(tm[statSel]||{})[id], mm=sp?tmSpent(sp)/60000:0;
@@ -1450,6 +1508,7 @@ function renderStats(){
   // mark the selected day (statSel may have been defaulted above)
   cal.querySelectorAll("button").forEach((b,i)=>{const x=days[i]; if(x) b.classList.toggle("sel",x.on&&x.k===statSel)});
 
+  renderMore(counted,today);
   // per task
   const pt=$("perTask"); pt.innerHTML="";
   if(!counted.length){pt.innerHTML=`<div class="empty">Энэ сард бүртгэл алга</div>`; return}
@@ -1465,6 +1524,19 @@ function renderStats(){
     r.querySelector(".nm").textContent=t.name;
     pt.appendChild(r);
   });
+}
+// Extra things logged on a day (water, sleep, rating…): one short text each, for the day details.
+function dayExtras(k){
+  const out=[];
+  if(water[k]) out.push(`💧 ${water[k]} аяга ус`);
+  return out;
+}
+// Month averages of the extra logs; a tile appears only when there is something to show.
+function renderMore(counted,today){
+  const tiles=[], tile=(k,v,sub)=>`<div class="tile"><div class="k">${k}</div><div class="v">${v}${sub?`<small>${sub}</small>`:""}</div></div>`;
+  const wd=counted.filter(x=>water[x.k]);
+  if(wd.length) tiles.push(tile("Ус · өдрийн дундаж",(wd.reduce((a,x)=>a+water[x.k],0)/wd.length).toFixed(1).replace(/\.0$/,""),"аяга"));
+  $("moreTiles").innerHTML=tiles.join(""); $("moreSec").hidden=!tiles.length;
 }
 $("mPrev").onclick=()=>{if(--statM<0){statM=11;statY--} statSel=null; renderStats()};
 $("mNext").onclick=()=>{if(++statM>11){statM=0;statY++} statSel=null; renderStats()};
@@ -1704,7 +1776,7 @@ $("installBtn").onclick=async()=>{if(!installEvt)return;installEvt.prompt();try{
 renderInstall();
 
 /* ---------- backup: everything lives only on this phone, so let people keep a copy ---------- */
-const DATA_KEYS=["elsen_cfg","elsen_hist","elsen_tm","elsen_snap","elsen_sw","elsen_pantry","elsen_foodcfg","elsen_plan"];
+const DATA_KEYS=["elsen_cfg","elsen_hist","elsen_tm","elsen_snap","elsen_sw","elsen_pantry","elsen_foodcfg","elsen_plan","elsen_water"];
 function backupData(){
   const data={};
   DATA_KEYS.forEach(k=>{try{const v=localStorage.getItem(k); if(v!=null) data[k]=JSON.parse(v)}catch(e){}});

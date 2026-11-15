@@ -328,3 +328,21 @@ test('backup by copy and paste: copies all data, paste restores it, bad text is 
   await Promise.all([page.waitForNavigation(), page.click('#toastBtn')]);
   assert.equal(await page.evaluate(() => localStorage.elsen_pantry), '["Өндөг"]');
 });
+
+test('water: count cups, tap a cup, goal from settings, shown in stats', async t => {
+  const { page } = await open(t);
+  assert.equal(await page.locator('#cups .cup').count(), 8);
+  for (let i = 0; i < 3; i++) await page.click('#wPlus');
+  assert.equal(await page.textContent('#wCnt'), '3');
+  await page.click('#cups .cup >> nth=5');                 // fill up to the 6th cup
+  assert.equal(await page.textContent('#wCnt'), '6');
+  await page.click('#cups .cup >> nth=5');                 // tapping the last full cup takes one back
+  assert.equal(await page.textContent('#wCnt'), '5');
+  await page.click('#wMinus');
+  assert.equal(await page.evaluate(() => water[dayKey(new Date())]), 4);
+  await page.click('#openSet'); await page.fill('#waterGoalIn', '0'); await page.click('#save');
+  assert.ok(!(await page.isVisible('#waterSec')));
+  await page.click('nav.tabs button[data-v="v-stat"]');
+  assert.match(await page.textContent('#dayInfo'), /💧 4 аяга ус/);
+  assert.match(await page.textContent('#moreTiles'), /Ус · өдрийн дундаж\s*4/);
+});
