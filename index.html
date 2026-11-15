@@ -119,6 +119,7 @@ h2{font-family:"Cormorant Garamond",serif;font-size:24px;font-weight:600;color:v
 .opts label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--mute)}
 .opts input{background:var(--bg2);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:7px 8px;font:inherit;font-size:14px;color-scheme:dark}
 .opts input[type=number]{width:62px}
+.opts input.unit{width:104px}
 .alldone{display:none;text-align:center;padding:14px;border-radius:14px;background:linear-gradient(135deg,#2b2214,#1d1a12);border:1px solid var(--sand2);color:var(--sand3);font-size:14px;margin-bottom:8px}
 .alldone.on{display:block}
 .alldone.pop{animation:pop .6s cubic-bezier(.2,1.6,.4,1)}
@@ -279,6 +280,9 @@ select{background:var(--card);border:1px solid var(--line);color:var(--ink);bord
 .shbox .row{margin-bottom:6px}
 input[type=date]{background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:9px 10px;font:inherit;font-size:14px;color-scheme:dark;min-height:38px}
 /* water */
+.tqty{flex:none;background:none;border:1px dashed var(--line);color:var(--mute);border-radius:10px;padding:7px 9px;font:inherit;font-size:13px;cursor:pointer;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tqty.has{border-style:solid;border-color:var(--sand2);color:var(--sand3)}
+.tqin{width:78px;flex:none;background:var(--bg2);border:1px solid var(--sand2);color:var(--ink);border-radius:10px;padding:7px 8px;font:inherit;font-size:14px}
 .water .cups{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
 .cup{width:30px;height:38px;padding:0;border:0;background:none;cursor:pointer;color:var(--line)}
 .cup svg{width:100%;height:100%;display:block}
@@ -606,7 +610,7 @@ const SHIFT_DEFAULT=()=>({on:false,every:7,cur:0,from:"",list:[
 cfg.tasks=cfg.tasks.filter(t=>isObj(t)&&t.id!=null&&typeof t.name==="string").map(t=>{
   const m=/(\d+)\s*(минут|мин)/i.exec(t.name);
   const min=typeof t.min==="number"&&isFinite(t.min)?Math.max(0,Math.min(600,Math.round(t.min))):(m?Math.min(600,+m[1]):0);
-  return {id:String(t.id),name:t.name,min,rem:isHM(t.rem)?t.rem:""};
+  return {id:String(t.id),name:t.name,min,rem:isHM(t.rem)?t.rem:"",unit:typeof t.unit==="string"?t.unit.trim().slice(0,12):""};
 });
 if(!isObj(hist)) hist={};
 for(const k in hist) if(!isObj(hist[k])) delete hist[k];
@@ -895,6 +899,7 @@ function renderTasks(){
     el.onkeydown=e=>{if(e.target===el&&(e.key===" "||e.key==="Enter")){e.preventDefault();el.click()}};
     el.innerHTML=`<div class="box"></div><div class="tx"><div class="t"></div><div class="tp" hidden><i></i></div></div><div class="tm"></div>`;
     el.querySelector(".t").textContent=t.name;
+    if(t.unit) el.appendChild(qtyButton(t,k));
     if(t.min>0&&!done[t.id]){
       const r=document.createElement("button"); r.className="treset"; r.textContent="↺"; r.hidden=true;
       r.setAttribute("aria-label","Таймерыг эхнээс нь: "+t.name);
@@ -925,6 +930,37 @@ function renderTasks(){
   updateTaskTimers();
   if(typeof renderWater==="function") renderWater();
 }
+/* ---------- amounts logged on tasks (km run, pages read, reps…) ---------- */
+let qty=store.get("elsen_qty",{});
+if(!isObj(qty)) qty={};
+for(const k in qty){ if(!isObj(qty[k])){delete qty[k];continue}
+  for(const id in qty[k]) if(!(Number.isFinite(qty[k][id])&&qty[k][id]>0)) delete qty[k][id] }
+const fmtQ=n=>String(Math.round(n*100)/100);
+function qtyButton(t,k){
+  const b=document.createElement("button"); b.className="tqty";
+  const v=(qty[k]||{})[t.id];
+  b.textContent=v?`${fmtQ(v)} ${t.unit}`:`+ ${t.unit}`; b.classList.toggle("has",!!v);
+  b.setAttribute("aria-label",`${t.name}: ${v?fmtQ(v)+" "+t.unit+". Засах":t.unit+" бүртгэх"}`);
+  b.onclick=e=>{
+    e.stopPropagation();
+    // text + decimal keypad: a number field drops "5,5" (the comma many phone keypads show)
+    const i=document.createElement("input"); i.type="text"; i.inputMode="decimal"; i.autocomplete="off"; i.className="tqin";
+    i.value=v||""; i.placeholder=t.unit; i.setAttribute("aria-label",`${t.name}: ${t.unit}`); i.enterKeyHint="done";
+    let doneEd=false;
+    const commit=save=>{ if(doneEd) return; doneEd=true;
+      if(save){ const n=parseFloat(String(i.value).replace(",",".")), d=qty[k]||(qty[k]={});
+        if(n>0&&n<1e6) d[t.id]=n; else delete d[t.id];
+        if(!Object.keys(d).length) delete qty[k];
+        store.set("elsen_qty",qty); }
+      renderTasks(); };
+    i.onclick=ev=>ev.stopPropagation();
+    i.onkeydown=ev=>{ev.stopPropagation(); if(ev.key==="Enter")commit(true); if(ev.key==="Escape")commit(false)};
+    i.onblur=()=>commit(true);
+    b.replaceWith(i); i.focus();
+  };
+  return b;
+}
+
 /* ---------- water: cups per day ---------- */
 let water=store.get("elsen_water",{});
 if(!isObj(water)) water={}; for(const k in water) if(!(Number.isFinite(water[k])&&water[k]>=0)) delete water[k]; else water[k]=Math.min(99,Math.round(water[k]));
@@ -1177,6 +1213,10 @@ function renderEdit(){
     mi.oninput=e=>t.min=Math.max(0,Math.min(600,parseInt(e.target.value,10)||0));
     const mu=document.createElement("span");mu.textContent="мин";
     lm.append(mi,mu); o.appendChild(lm);
+    const lu=document.createElement("label"); lu.innerHTML=`<span>📏 Тоо</span>`;
+    const ui=document.createElement("input"); ui.type="text"; ui.className="unit"; ui.maxLength=12; ui.placeholder="км, хуудас…"; ui.value=t.unit||"";
+    ui.setAttribute("aria-label","Бүртгэх нэгж: "+(t.name||"зүйл")); ui.oninput=e=>t.unit=e.target.value;
+    lu.appendChild(ui); o.appendChild(lu);
     if(typeof remEditor==="function") o.appendChild(remEditor(t));
     const mv=document.createElement("div"); mv.className="mv";
     [["↑",-1,"Дээш"],["↓",1,"Доош"]].forEach(([s,d,lab])=>{
@@ -1192,13 +1232,13 @@ function renderEdit(){
 $("openSet").onclick=openSettings;
 $("close").onclick=closeSettings;
 $("sheet").onclick=e=>{if(e.target.id==="sheet")closeSettings()};
-$("addTask").onclick=()=>{draft.push({id:"t"+Date.now(),name:"",min:0,rem:""});renderEdit();const ins=$("editList").querySelectorAll("input.nm");ins[ins.length-1].focus()};
+$("addTask").onclick=()=>{draft.push({id:"t"+Date.now(),name:"",min:0,rem:"",unit:""});renderEdit();const ins=$("editList").querySelectorAll("input.nm");ins[ins.length-1].focus()};
 $("save").onclick=()=>{
   ["dayStart","sleepS","sleepE","workS","workE"].forEach(id=>{if($(id).value)cfg[id]=$(id).value});
   shDraft.list=shDraft.list.filter(x=>x.name.trim()).map(x=>({...x,name:x.name.trim()}));
   shDraft.on=shDraft.on&&shDraft.list.length>0; shDraft.cur=Math.min(shDraft.cur,Math.max(0,shDraft.list.length-1));
   cfg.shifts=shDraft;
-  cfg.tasks=draft.filter(t=>t.name.trim()).map(t=>({id:t.id,name:t.name.trim(),min:t.min||0,rem:t.rem||""}));
+  cfg.tasks=draft.filter(t=>t.name.trim()).map(t=>({id:t.id,name:t.name.trim(),min:t.min||0,rem:t.rem||"",unit:(t.unit||"").trim().slice(0,12)}));
   cfg.sound=$("soundOn").checked;
   cfg.sandSound=$("sandOn").checked; if(cfg.sandSound) unlockAudio();
   {const w=parseInt($("waterGoalIn").value,10); if(w>=0&&w<=20) cfg.waterGoal=w}
@@ -1501,7 +1541,8 @@ function renderStats(){
       const sp=(tm[statSel]||{})[id], mm=sp?tmSpent(sp)/60000:0;
       r.innerHTML=`<span class="ic">${done[id]?"✓":"○"}</span><span class="nm"></span><span class="at"></span>`;
       r.querySelector(".nm").textContent=nameOf(id);
-      r.querySelector(".at").textContent=[done[id]||"",mm>=1?fmtDur(mm):""].filter(Boolean).join(" · ");
+      const q=(qty[statSel]||{})[id], u=(cfg.tasks.find(x=>x.id===id)||{}).unit||"";
+      r.querySelector(".at").textContent=[done[id]||"",mm>=1?fmtDur(mm):"",q?`${fmtQ(q)} ${u}`.trim():""].filter(Boolean).join(" · ");
       info.appendChild(r);
     });
   } else info.innerHTML=`<div class="empty">Өдөр дээр дарж дэлгэрэнгүйг харна уу</div>`;
@@ -1513,15 +1554,18 @@ function renderStats(){
   const pt=$("perTask"); pt.innerHTML="";
   if(!counted.length){pt.innerHTML=`<div class="empty">Энэ сард бүртгэл алга</div>`; return}
   cfg.tasks.forEach(t=>{
-    let have=0,did=0,tmin=0;
-    counted.forEach(x=>{const ids=snap[x.k]||cfg.tasks.map(q=>q.id); if(!ids.includes(t.id))return; have++;
+    let have=0,did=0,tmin=0,qsum=0,qdays=0;
+    counted.forEach(x=>{const q=(qty[x.k]||{})[t.id]; if(q){qsum+=q;qdays++}
+      const ids=snap[x.k]||cfg.tasks.map(q=>q.id); if(!ids.includes(t.id))return; have++;
       if((hist[x.k]||{})[t.id])did++; const sp=(tm[x.k]||{})[t.id]; if(sp)tmin+=tmSpent(sp)/60000});
     if(!have) return;
     const pct=Math.round(did/have*100);
     const r=document.createElement("div"); r.className="pt";
     r.innerHTML=`<div class="r1"><span class="nm"></span><span class="n"><b>${did}</b>/${have} · ${pct}%</span></div><div class="bar2"><i style="width:${pct}%"></i></div>`+
-      (tmin>=1?`<div class="r2">⏱ Нийт ${fmtDur(tmin)} зарцуулсан</div>`:"");
+      (tmin>=1?`<div class="r2">⏱ Нийт ${fmtDur(tmin)} зарцуулсан</div>`:"")+
+      (qsum?`<div class="r2 q">📏 Нийт <b>${fmtQ(qsum)}</b> <span class="u"></span> · ${qdays} өдөр</div>`:"");
     r.querySelector(".nm").textContent=t.name;
+    if(qsum) r.querySelector(".u").textContent=t.unit||"";
     pt.appendChild(r);
   });
 }
@@ -1776,7 +1820,7 @@ $("installBtn").onclick=async()=>{if(!installEvt)return;installEvt.prompt();try{
 renderInstall();
 
 /* ---------- backup: everything lives only on this phone, so let people keep a copy ---------- */
-const DATA_KEYS=["elsen_cfg","elsen_hist","elsen_tm","elsen_snap","elsen_sw","elsen_pantry","elsen_foodcfg","elsen_plan","elsen_water"];
+const DATA_KEYS=["elsen_cfg","elsen_hist","elsen_tm","elsen_snap","elsen_sw","elsen_pantry","elsen_foodcfg","elsen_plan","elsen_water","elsen_qty"];
 function backupData(){
   const data={};
   DATA_KEYS.forEach(k=>{try{const v=localStorage.getItem(k); if(v!=null) data[k]=JSON.parse(v)}catch(e){}});

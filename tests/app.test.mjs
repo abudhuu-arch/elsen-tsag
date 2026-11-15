@@ -66,7 +66,7 @@ test('old saved data migrates without losing history', async t => {
   const hist = { [keyAgo(3)]: { t1: '08:00', t5: '21:00' } };
   const { page } = await open(t, `()=>{localStorage.elsen_cfg=${JSON.stringify(JSON.stringify({ dayStart: '00:00', sleepS: '23:00', sleepE: '07:00', workS: '09:00', workE: '18:00', tasks: [{ id: 't1', name: 'Гадаад хэл' }, { id: 't5', name: 'Ном унших 30 минут' }] }))};localStorage.elsen_hist=${JSON.stringify(JSON.stringify(hist))}}`);
   const tasks = await page.evaluate(() => cfg.tasks);
-  assert.deepEqual(tasks, [{ id: 't1', name: 'Гадаад хэл', min: 0, rem: '' }, { id: 't5', name: 'Ном унших 30 минут', min: 30, rem: '' }]);
+  assert.deepEqual(tasks, [{ id: 't1', name: 'Гадаад хэл', min: 0, rem: '', unit: '' }, { id: 't5', name: 'Ном унших 30 минут', min: 30, rem: '', unit: '' }]);
   assert.deepEqual(JSON.parse(await page.evaluate(() => localStorage.elsen_hist)), hist);
   assert.deepEqual(await page.$$eval('.tbtn', b => b.map(x => x.textContent)), ['▶ 30м']);
 });
@@ -81,7 +81,7 @@ test('corrupted or hand-edited data does not break the app', async t => {
   const { page } = await open(t, `()=>{const b=${JSON.stringify(bad)};for(const k in b)localStorage.setItem(k,JSON.stringify(b[k]))}`);
   const c = await page.evaluate(() => cfg);
   assert.equal(c.dayStart, '00:00'); assert.equal(c.sleepS, '23:00');
-  assert.deepEqual(c.tasks, [{ id: 't1', name: 'Ном 20 мин', min: 20, rem: '' }, { id: '7', name: 'Гүйх', min: 600, rem: '' }]);
+  assert.deepEqual(c.tasks, [{ id: 't1', name: 'Ном 20 мин', min: 20, rem: '', unit: '' }, { id: '7', name: 'Гүйх', min: 600, rem: '', unit: '' }]);
   assert.match(await page.textContent('#clock'), /^\d\d:\d\d:\d\d$/);
   for (const v of ['v-sw', 'v-food', 'v-stat']) await page.click(`nav.tabs button[data-v="${v}"]`);
 });
@@ -345,4 +345,25 @@ test('water: count cups, tap a cup, goal from settings, shown in stats', async t
   await page.click('nav.tabs button[data-v="v-stat"]');
   assert.match(await page.textContent('#dayInfo'), /💧 4 аяга ус/);
   assert.match(await page.textContent('#moreTiles'), /Ус · өдрийн дундаж\s*4/);
+});
+
+test('task amounts: log km on a task, shown in day details and month total', async t => {
+  const { page } = await open(t);
+  await page.click('#openSet');
+  await page.locator('.editbox').nth(3).locator('input.unit').fill('км');   // "Алхах 30 минут"
+  await page.click('#save');
+  const card = page.locator('#tasks .task').nth(3);
+  await card.locator('.tqty').click();
+  await card.locator('.tqin').fill('5,5');                 // comma works as a decimal point
+  await card.locator('.tqin').press('Enter');
+  assert.equal(await card.locator('.tqty').textContent(), '5.5 км');
+  assert.equal(await page.evaluate(() => (qty[dayKey(new Date())] || {}).t4), 5.5);
+  assert.equal(await card.getAttribute('aria-checked'), 'false');   // logging an amount does not tick the task
+  await page.click('nav.tabs button[data-v="v-stat"]');
+  assert.match(await page.textContent('#dayInfo'), /5\.5 км/);
+  assert.match(await page.textContent('#perTask'), /Нийт 5\.5 км · 1 өдөр/);
+  // clearing the field removes it
+  await page.click('nav.tabs button[data-v="v-day"]');
+  await card.locator('.tqty').click(); await card.locator('.tqin').fill(''); await card.locator('.tqin').press('Enter');
+  assert.equal(await card.locator('.tqty').textContent(), '+ км');
 });
