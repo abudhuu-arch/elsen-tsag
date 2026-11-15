@@ -426,3 +426,29 @@ test('weekly report: Sunday card on the Day tab, best day, weak task, totals; al
   assert.match(await page.textContent('#wkStat'), /93%/);
   assert.ok(await page.isDisabled('#wkNext'));
 });
+
+test('food tab follows the shift schedule: this week\'s shifts, meal times per day, told to the generator', async t => {
+  // Wednesday; morning shift Mon–Sat... rotation every 7 days starting Monday 2026-11-09 with night shift
+  const { page } = await open(t, null, { time: new Date(2026, 10, 11, 10, 0, 0) });
+  await page.evaluate(() => {
+    cfg.shifts = { ...cfg.shifts, on: true, every: 7, cur: 2, from: '2026-11-09' };   // night shift this week
+    store.set('elsen_cfg', cfg); drawBar(); renderFoodShift(); renderPlan();
+  });
+  await page.click('nav.tabs button[data-v="v-food"]');
+  assert.ok(!(await page.isVisible('#shiftRow')));
+  assert.match(await page.textContent('#shiftAuto'), /Да–Ня Шөнийн ээлж/);
+  await page.click('#gen');
+  await page.waitForSelector('#plan .meal');
+  const labels = await page.$$eval('#plan .meal .k', ks => ks.map(k => k.textContent));
+  // night shift: wake 15:00, work 22:00–06:00
+  assert.deepEqual(labels.slice(0, 3), ['Сэрээд · 15:30', 'Ажлын өмнө · 21:00', 'Ажил дээр · 02:00']);
+  assert.match(await page.textContent('#plan'), /Шөнийн ээлжинд хүнд хоолноос/);
+  assert.match(await page.evaluate(() => { const f = foodShiftInfo(); return planPrompt({ ...foodCfg, ...f, shiftDetail: f.detail, pantry: [] }); }),
+    /Да–Ня: Шөнийн ээлж \(ажил 22:00–06:00, унтах 08:00–15:00\)/);
+  // a morning schedule gives breakfast, at work, evening
+  assert.deepEqual(await page.evaluate(() => mealTimes({ sleepS: 22 * 60, sleepE: 5 * 60, workS: 6 * 60, workE: 14 * 60 }).slice(0, 3)),
+    ['Сэрээд · 05:30', 'Ажил дээр · 10:00', 'Орой · 19:00']);
+  // shifts off → the manual choice is back
+  await page.evaluate(() => { cfg.shifts.on = false; renderFoodShift(); });
+  assert.ok(await page.isVisible('#shiftRow'));
+});

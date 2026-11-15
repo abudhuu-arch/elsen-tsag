@@ -39,6 +39,7 @@
   --sleep:#5b6fa8; --work:#b8743a; --free:#3f5a46; --ok:#8fbf7f;
 }
 *{box-sizing:border-box;margin:0;padding:0}
+[hidden]{display:none!important}   /* class rules like .row{display:flex} must not override the hidden attribute */
 html,body{background:var(--bg);color:var(--ink);font-family:Manrope,system-ui,sans-serif;-webkit-tap-highlight-color:transparent}
 body{min-height:100vh;background:radial-gradient(120% 60% at 50% 0%,#2a2018 0%,var(--bg) 60%)}
 .wrap{max-width:460px;margin:0 auto;padding:20px 18px 60px}
@@ -564,7 +565,8 @@ input[type=time]::-webkit-date-and-time-value{text-align:left}
         <div class="row"><label>Зорилго</label>
           <select id="goal"><option>Эрүүл хооллолт</option><option>Жин хасах</option><option>Булчин нэмэх</option><option>Эрч хүч нэмэх</option></select></div>
         <div class="row"><label>Хэдэн хүнд</label><select id="ppl"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></div>
-        <div class="row"><label>Ажлын ээлж</label><select id="shift"><option>Өглөөний ээлж</option><option>Оройн ээлж</option><option>Шөнийн ээлж</option><option>Ээлж солигддог</option></select></div>
+        <div class="note" id="shiftAuto" hidden></div>
+        <div class="row" id="shiftRow"><label>Ажлын ээлж</label><select id="shift"><option>Өглөөний ээлж</option><option>Оройн ээлж</option><option>Шөнийн ээлж</option><option>Ээлж солигддог</option></select></div>
         <input type="text" id="note" placeholder="Нэмэлт: идэхгүй хоол, дуртай хоол г.м." style="width:100%;margin-top:4px">
         <button class="btn primary" id="gen">Хөтөлбөр гаргах</button>
         <div class="status" id="genStatus"></div>
@@ -1293,6 +1295,7 @@ function tick(){
   const k=dayKey(n);
   if(k!==lastKey){ // new day: hourglass flips, list resets
     lastKey=k; drawBar(); renderTasks(); renderWeek(); flipGlass(); store.set("elsen_seen",k);
+    if(typeof renderFoodShift==="function"){renderFoodShift(); renderPlan()}
     if($("v-stat").classList.contains("on")&&typeof renderStats==="function"){statY=null; statSel=null; renderStats()}
   }
 }
@@ -1372,7 +1375,7 @@ $("save").onclick=()=>{
   cfg.sandSound=$("sandOn").checked; if(cfg.sandSound) unlockAudio();
   {const w=parseInt($("waterGoalIn").value,10); if(w>=0&&w<=20) cfg.waterGoal=w}
   store.set("elsen_cfg",cfg); lastRemCheck=-1; lastKey=dayKey(new Date());
-  closeSettings(); drawBar(); renderTasks(); renderWeek(); tick(); sandSoundSync();
+  closeSettings(); drawBar(); renderTasks(); renderWeek(); tick(); sandSoundSync(); renderFoodShift(); renderPlan();
   toast("Хадгаллаа ✓");
 };
 
@@ -1895,7 +1898,7 @@ function fallbackPlan(o){
     "Эрүүл хооллолт":["Өдөрт 5 янзын өнгөтэй ногоо, жимс идэхийг хичээгээрэй","Давс, тосыг багасгаарай","Хоолоо тогтмол цагт идээрэй"]
   }[o.goal]||[];
   const t=[...tips];
-  if(o.shift==="Шөнийн ээлж") t.push("Шөнийн ээлжинд хүнд хоолноос зайлсхийж, хөнгөн зууш авч яваарай");
+  if(o.night||o.shift==="Шөнийн ээлж") t.push("Шөнийн ээлжинд хүнд хоолноос зайлсхийж, хөнгөн зууш авч яваарай");
   if(+o.ppl>1) t.push(`${o.ppl} хүнд: орцыг ${o.ppl} дахин нэмээрэй`);
   if(o.note) t.push("Нэмэлт хүсэлтийг офлайн горимд бүрэн тооцох боломжгүй. Тохирохгүй хоолыг өөрөө сольж болно");
   return {days,uses,tips:t};
@@ -1918,7 +1921,8 @@ async function getSample(){
 }
 function planPrompt(o){
   return `Чи хоол зүйч, фитнес дасгалжуулагч. Монгол хэлээр 7 хоногийн хоол ба дасгалын хөтөлбөр гарга.
-Зорилго: ${o.goal}. Хүний тоо: ${o.ppl}. Ажлын ээлж: ${o.shift}.
+Зорилго: ${o.goal}. Хүний тоо: ${o.ppl}. Ажлын ээлж: ${o.shift}.${o.shiftDetail?`
+Энэ 7 хоногийн ээлж (хоолны цагийг өдөр бүрийн ээлжид тааруул): ${o.shiftDetail}.`:""}
 Гэрт байгаа хүнс: ${o.pantry.length?o.pantry.join(", "):"(жагсаалт хоосон)"}.
 Нэмэлт: ${o.note||"байхгүй"}.
 Гэрт байгаа хүнсийг аль болох ашигла, монгол гэр бүлд энгийн хоол санал болго.
@@ -1929,7 +1933,7 @@ function planPrompt(o){
 }
 $("gen").onclick=async()=>{
   const btn=$("gen"), st=$("genStatus");
-  const o={...foodCfg,pantry:[...pantry]};
+  const fs=foodShiftInfo(), o={...foodCfg,shift:fs.shift,night:fs.night,shiftDetail:fs.detail,pantry:[...pantry]};
   btn.disabled=true; st.textContent="Хөтөлбөр бэлдэж байна…";
   let p=null, src="local";
   if(navigator.onLine!==false){
@@ -1943,6 +1947,36 @@ $("gen").onclick=async()=>{
   plan={...p,src,at:Date.now()}; planDay=todayPlanDay();
   store.set("elsen_plan",plan); btn.disabled=false; renderPlan();
 };
+/* The food plan follows the shift schedule when it is on: each day's meal times come from that day's hours. */
+const hm=m=>{m=((Math.round(m/15)*15)%1440+1440)%1440;return `${pad(Math.floor(m/60))}:${pad(m%60)}`};
+function mealTimes(s){
+  const wake=s.sleepE, rel=x=>((x-wake)%1440+1440)%1440, len=((s.workE-s.workS)%1440+1440)%1440, mid=s.workS+len/2;
+  const out=[`Сэрээд · ${hm(wake+30)}`];
+  if(rel(s.workS)>=180){ out.push(`Ажлын өмнө · ${hm(s.workS-60)}`, `Ажил дээр · ${hm(mid)}`) }
+  else { out.push(`Ажил дээр · ${hm(mid)}`, `Орой · ${hm(wake+Math.max(rel(s.workE)+60,rel(s.sleepS)-180))}`) }
+  out.push("Зууш"); return out;
+}
+const planKey=i=>addDays(mondayOf(dayKey(new Date())),i);      // plan day i = this week's Monday + i
+// This week's shifts, merged into runs: "Да–Ба: Өглөөний ээлж"
+function weekShiftRuns(){
+  const WDm=["Да","Мя","Лх","Пү","Ба","Бя","Ня"], runs=[];
+  for(let i=0;i<7;i++){const sh=shiftOn(planKey(i)), n=sh?sh.shift.name:"";
+    const r=runs[runs.length-1]; if(r&&r.n===n) r.b=i; else runs.push({n,a:i,b:i,sh:sh&&sh.shift})}
+  return runs.map(r=>({...r,days:r.a===r.b?WDm[r.a]:`${WDm[r.a]}–${WDm[r.b]}`}));
+}
+const isNight=x=>toMin(x.workS)>toMin(x.workE);                // work runs past midnight
+function renderFoodShift(){
+  const on=cfg.shifts.on;
+  $("shiftRow").hidden=on; $("shiftAuto").hidden=!on; if(!on) return;
+  $("shiftAuto").textContent="🔁 Ээлжийн хуваариас: "+weekShiftRuns().map(r=>`${r.days} ${r.n}`).join(" · ")+". Хоолны цаг өдөр бүрийн ээлжээр тооцогдоно.";
+}
+// What the plan generator is told about work hours.
+function foodShiftInfo(){
+  if(!cfg.shifts.on) return {shift:foodCfg.shift,night:foodCfg.shift==="Шөнийн ээлж",detail:""};
+  const runs=weekShiftRuns();
+  return {shift:"Ээлж солигддог", night:runs.some(r=>r.sh&&isNight(r.sh)),
+    detail:runs.map(r=>`${r.days}: ${r.n} (ажил ${r.sh.workS}–${r.sh.workE}, унтах ${r.sh.sleepS}–${r.sh.sleepE})`).join("; ")};
+}
 function renderPlan(){
   const box=$("plan"), st=$("genStatus"); box.innerHTML="";
   if(!plan){st.textContent="";return}
@@ -1952,8 +1986,10 @@ function renderPlan(){
   plan.days.forEach((x,i)=>{const c=document.createElement("button");c.className="chip"+(i===planDay?" on":"");c.textContent=x.day;
     c.onclick=()=>{planDay=i;renderPlan()};tabs.appendChild(c)});
   box.appendChild(tabs);
-  const day=plan.days[planDay]||plan.days[0], labels=MEAL_LABELS[foodCfg.shift]||MEAL_LABELS["Ээлж солигддог"];
+  const day=plan.days[planDay]||plan.days[0], dsh=cfg.shifts.on?shiftOn(planKey(planDay)):null;
+  const labels=dsh?mealTimes(sch(planKey(planDay))):MEAL_LABELS[foodCfg.shift]||MEAL_LABELS["Ээлж солигддог"];
   const card=document.createElement("div"); card.className="card";
+  if(dsh){const h=document.createElement("div"); h.className="small"; h.style.margin="0 0 6px"; h.textContent=`🔁 ${dsh.shift.name} · ажил ${dsh.shift.workS}–${dsh.shift.workE}`; card.appendChild(h)}
   MEAL_KEYS.forEach((k,i)=>{ if(!day[k])return; const m=document.createElement("div"); m.className="meal";
     m.innerHTML=`<div class="k"></div><div class="v"></div>`; m.querySelector(".k").textContent=labels[i]; m.querySelector(".v").textContent=day[k]; card.appendChild(m); });
   if(day.workout&&day.workout.length){
@@ -1975,7 +2011,7 @@ function renderPlan(){
 }
 if(plan){const p=normalizePlan(plan); plan=p?{...p,src:plan.src==="claude"?"claude":"local",at:+plan.at||Date.now()}:null}
 if(plan&&plan.days[todayPlanDay()]) planDay=todayPlanDay();
-renderPantry(); renderPlan();
+renderPantry(); renderFoodShift(); renderPlan();
 
 /* ---------- toast ---------- */
 let toastT=0;
