@@ -272,6 +272,12 @@ select{background:var(--card);border:1px solid var(--line);color:var(--ink);bord
 .mv button:disabled{opacity:.3;cursor:default}
 .treset{flex:none;width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:none;color:var(--mute);font-size:17px;cursor:pointer;margin-right:-4px}
 .switch{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 2px;font-size:14px;color:var(--mute);cursor:pointer}
+.shiftinfo{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--mute);margin-top:8px}
+.shiftinfo b{color:var(--sand);font-weight:600}
+.shbox{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:8px}
+.shbox .edit{display:flex;gap:8px;margin-bottom:8px}
+.shbox .row{margin-bottom:6px}
+input[type=date]{background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:9px 10px;font:inherit;font-size:14px;color-scheme:dark;min-height:38px}
 .switch small.hint{display:block;font-size:11px;color:var(--dim);margin-top:2px}
 .switch input{position:absolute;opacity:0;width:1px;height:1px}
 .switch i{flex:none;width:44px;height:26px;border-radius:13px;background:var(--line);position:relative;transition:.2s}
@@ -377,6 +383,7 @@ input[type=time]::-webkit-date-and-time-value{text-align:left}
 
   <div class="bar" id="bar"></div>
   <div class="ticks" id="ticks"></div>
+  <div class="shiftinfo" id="shiftInfo" hidden></div>
   <div class="legend">
     <span><i style="background:var(--sleep)"></i>Унтах</span>
     <span><i style="background:var(--work)"></i>Ажил</span>
@@ -484,8 +491,19 @@ input[type=time]::-webkit-date-and-time-value{text-align:left}
   <div class="panel" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
     <h3 id="sheetTitle" tabindex="-1">Тохиргоо</h3>
     <div class="row"><label>Өдөр эхлэх цаг</label><input type="time" id="dayStart"></div>
-    <div class="row"><label>Унтах</label><div class="pair"><input type="time" id="sleepS">–<input type="time" id="sleepE"></div></div>
-    <div class="row"><label>Ажил</label><div class="pair"><input type="time" id="workS">–<input type="time" id="workE"></div></div>
+    <label class="switch"><span>🔁 Ээлжээр ажилладаг <small class="hint">Унтах, ажлын цаг ээлжээр автоматаар солигдоно</small></span><input type="checkbox" id="shiftOn"><i aria-hidden="true"></i></label>
+    <div id="fixedSch">
+      <div class="row"><label>Унтах</label><div class="pair"><input type="time" id="sleepS">–<input type="time" id="sleepE"></div></div>
+      <div class="row"><label>Ажил</label><div class="pair"><input type="time" id="workS">–<input type="time" id="workE"></div></div>
+    </div>
+    <div id="shiftSec" hidden>
+      <div id="shiftList"></div>
+      <button class="btn" id="addShift">+ Ээлж нэмэх</button>
+      <div class="row" style="margin-top:12px"><label for="shiftEvery">Хэдэн хоногоор солигдох</label><div class="pair"><input type="number" id="shiftEvery" min="1" max="60" inputmode="numeric" style="width:70px">хоног</div></div>
+      <div class="row"><label for="shiftCur">Одоо явж буй ээлж</label><select id="shiftCur"></select></div>
+      <div class="row"><label for="shiftFrom">Энэ ээлж эхэлсэн өдөр</label><input type="date" id="shiftFrom"></div>
+      <div class="note" id="shiftNote"></div>
+    </div>
     <div class="sub">Заавал хийх зүйлс</div>
     <div id="editList"></div>
     <button class="btn" id="addTask">+ Нэмэх</button>
@@ -540,6 +558,16 @@ const isObj=o=>!!o&&typeof o==="object"&&!Array.isArray(o);
 ["dayStart","sleepS","sleepE","workS","workE"].forEach(k=>{if(!isHM(cfg[k]))cfg[k]=DEFAULT[k]});
 if(!Array.isArray(cfg.tasks)) cfg.tasks=DEFAULT.tasks;
 cfg.sandSound=cfg.sandSound===true;          // off unless turned on
+// Shift rotation: shifts take turns every `every` days; `cur` was running on day `from`.
+const SHIFT_DEFAULT=()=>({on:false,every:7,cur:0,from:"",list:[
+  {id:"s1",name:"Өглөөний ээлж",workS:"06:00",workE:"14:00",sleepS:"22:00",sleepE:"05:00"},
+  {id:"s2",name:"Оройн ээлж",workS:"14:00",workE:"22:00",sleepS:"00:00",sleepE:"08:00"},
+  {id:"s3",name:"Шөнийн ээлж",workS:"22:00",workE:"06:00",sleepS:"08:00",sleepE:"15:00"}]});
+{ const d=SHIFT_DEFAULT(), sh=isObj(cfg.shifts)?cfg.shifts:{};
+  const list=Array.isArray(sh.list)?sh.list.filter(x=>isObj(x)&&typeof x.name==="string").map((x,i)=>({id:String(x.id||"s"+i),name:x.name,
+    workS:isHM(x.workS)?x.workS:"08:00",workE:isHM(x.workE)?x.workE:"17:00",sleepS:isHM(x.sleepS)?x.sleepS:"23:00",sleepE:isHM(x.sleepE)?x.sleepE:"07:00"})):d.list;
+  cfg.shifts={on:sh.on===true&&list.length>0,every:Math.max(1,Math.min(60,Math.round(+sh.every)||7)),list,
+    cur:Math.max(0,Math.min(list.length-1,Math.round(+sh.cur)||0)),from:/^\d{4}-\d\d-\d\d$/.test(sh.from)?sh.from:""}; }
 cfg.tasks=cfg.tasks.filter(t=>isObj(t)&&t.id!=null&&typeof t.name==="string").map(t=>{
   const m=/(\d+)\s*(минут|мин)/i.exec(t.name);
   const min=typeof t.min==="number"&&isFinite(t.min)?Math.max(0,Math.min(600,Math.round(t.min))):(m?Math.min(600,+m[1]):0);
@@ -582,10 +610,38 @@ function dayBounds(now){
 // Instant of wall-clock minute `min` (may exceed 1440) counted from midnight of now's date.
 const atWall=(now,min)=>new Date(now.getFullYear(),now.getMonth(),now.getDate(),0,min);
 function inRange(m,s,e){return s<=e ? (m>=s&&m<e) : (m>=s||m<e)}
+// whole days between two day keys (UTC arithmetic: daylight saving can't shift it)
+const daysBetween=(a,b)=>{const p=k=>{const [y,m,d]=k.split("-").map(Number);return Date.UTC(y,m-1,d)};return Math.round((p(b)-p(a))/864e5)};
+const addDays=(k,n)=>{const d=dayDate(k);d.setDate(d.getDate()+n);return keyOfDate(d)};
+// Which shift runs on day k, which day of it this is, and when the next one starts.
+function shiftOn(k){
+  const S=cfg.shifts; if(!S.on||!S.list.length) return null;
+  const from=S.from||k, n=S.list.length, d=daysBetween(from,k), blk=Math.floor(d/S.every);
+  const i=((S.cur+blk)%n+n)%n;
+  return {i,shift:S.list[i],day:d-blk*S.every+1,every:S.every,nextKey:addDays(from,(blk+1)*S.every),next:S.list[(i+1)%n]};
+}
+// The sleep/work hours in force on day k: the running shift's, or the fixed ones.
+let schMemo={k:null,v:null};
+function sch(k){
+  k=k||dayKey(new Date());
+  if(schMemo.k===k&&schMemo.c===cfg) return schMemo.v;
+  const sh=shiftOn(k), v=sh?sh.shift:cfg;
+  schMemo={k,c:cfg,v:{sleepS:toMin(v.sleepS),sleepE:toMin(v.sleepE),workS:toMin(v.workS),workE:toMin(v.workE)}};
+  return schMemo.v;
+}
 function blockAt(m){
-  if(inRange(m,toMin(cfg.sleepS),toMin(cfg.sleepE))) return "sleep";
-  if(inRange(m,toMin(cfg.workS),toMin(cfg.workE))) return "work";
+  const s=sch();
+  if(inRange(m,s.sleepS,s.sleepE)) return "sleep";
+  if(inRange(m,s.workS,s.workE)) return "work";
   return "free";
+}
+function renderShiftInfo(){
+  const el=$("shiftInfo"), k=dayKey(new Date()), sh=shiftOn(k);
+  el.hidden=!sh; if(!sh) return;
+  const nd=dayDate(sh.nextKey);
+  el.innerHTML=`<span>🔁 <b></b> · ${sh.day}/${sh.every} дэх өдөр</span><span>${MONTHS[nd.getMonth()]}ын ${nd.getDate()} (${WD[nd.getDay()]})-аас <b></b></span>`;
+  const bs=el.querySelectorAll("b"); bs[0].textContent=sh.shift.name; bs[1].textContent=sh.next.name;
+  if(sh.next===sh.shift) el.lastChild.hidden=true;
 }
 const NAMES={sleep:"Унтах цаг",work:"Ажлын цаг",free:"Чөлөөт цаг"};
 
@@ -761,6 +817,7 @@ addEventListener("pointerdown",()=>{if(cfg.sandSound&&!sandSrc){unlockAudio(); s
 
 /* ---------- timeline bar ---------- */
 function drawBar(){
+  renderShiftInfo();
   const bar=$("bar"); bar.innerHTML="";
   const ds=toMin(cfg.dayStart);
   let start=0, cur=blockAt(ds);
@@ -1006,7 +1063,7 @@ function tick(){
   $("date").textContent=`${n.getFullYear()} оны ${MONTHS[n.getMonth()]}ын ${n.getDate()}, ${WD[n.getDay()]}`;
   const k=dayKey(n);
   if(k!==lastKey){ // new day: hourglass flips, list resets
-    lastKey=k; renderTasks(); renderWeek(); flipGlass(); store.set("elsen_seen",k);
+    lastKey=k; drawBar(); renderTasks(); renderWeek(); flipGlass(); store.set("elsen_seen",k);
     if($("v-stat").classList.contains("on")&&typeof renderStats==="function"){statY=null; statSel=null; renderStats()}
   }
 }
@@ -1017,6 +1074,12 @@ function openSettings(){
   ["dayStart","sleepS","sleepE","workS","workE"].forEach(id=>$(id).value=cfg[id]);
   $("soundOn").checked=cfg.sound!==false;
   $("sandOn").checked=cfg.sandSound;
+  shDraft=JSON.parse(JSON.stringify(cfg.shifts));
+  if(!shDraft.from){shDraft.from=dayKey(new Date()); if(shDraft.every===7) shDraft.from=addDays(shDraft.from,-((dayDate(shDraft.from).getDay()+6)%7))}
+  // show the shift that is running today, counted from today
+  const live=shiftOn(dayKey(new Date()));
+  if(live){shDraft.cur=live.i; shDraft.from=addDays(dayKey(new Date()),1-live.day)}
+  renderShiftEdit();
   draft=cfg.tasks.map(t=>({...t})); renderEdit();
   if(!$("sheet").classList.contains("on")){
     sheetY=window.scrollY; document.body.style.top=-sheetY+"px";
@@ -1067,6 +1130,9 @@ $("sheet").onclick=e=>{if(e.target.id==="sheet")closeSettings()};
 $("addTask").onclick=()=>{draft.push({id:"t"+Date.now(),name:"",min:0,rem:""});renderEdit();const ins=$("editList").querySelectorAll("input.nm");ins[ins.length-1].focus()};
 $("save").onclick=()=>{
   ["dayStart","sleepS","sleepE","workS","workE"].forEach(id=>{if($(id).value)cfg[id]=$(id).value});
+  shDraft.list=shDraft.list.filter(x=>x.name.trim()).map(x=>({...x,name:x.name.trim()}));
+  shDraft.on=shDraft.on&&shDraft.list.length>0; shDraft.cur=Math.min(shDraft.cur,Math.max(0,shDraft.list.length-1));
+  cfg.shifts=shDraft;
   cfg.tasks=draft.filter(t=>t.name.trim()).map(t=>({id:t.id,name:t.name.trim(),min:t.min||0,rem:t.rem||""}));
   cfg.sound=$("soundOn").checked;
   cfg.sandSound=$("sandOn").checked; if(cfg.sandSound) unlockAudio();
@@ -1074,6 +1140,39 @@ $("save").onclick=()=>{
   closeSettings(); drawBar(); renderTasks(); renderWeek(); tick(); sandSoundSync();
   toast("Хадгаллаа ✓");
 };
+
+/* ---------- shift editor ---------- */
+let shDraft=null;
+function renderShiftEdit(){
+  const S=shDraft;
+  $("shiftOn").checked=S.on; $("shiftSec").hidden=!S.on; $("fixedSch").hidden=S.on;
+  $("shiftEvery").value=S.every; $("shiftFrom").value=S.from;
+  const l=$("shiftList"); l.innerHTML="";
+  S.list.forEach((x,i)=>{
+    const b=document.createElement("div"); b.className="shbox";
+    b.innerHTML=`<div class="edit"><input type="text" class="nm" placeholder="Ээлжийн нэр" aria-label="Ээлжийн нэр"><button class="del" aria-label="Ээлж устгах">×</button></div>
+      <div class="row"><label>Ажил</label><div class="pair"><input type="time" data-f="workS" aria-label="Ажил эхлэх">–<input type="time" data-f="workE" aria-label="Ажил дуусах"></div></div>
+      <div class="row"><label>Унтах</label><div class="pair"><input type="time" data-f="sleepS" aria-label="Унтах">–<input type="time" data-f="sleepE" aria-label="Босох"></div></div>`;
+    const nm=b.querySelector(".nm"); nm.value=x.name; nm.oninput=e=>{x.name=e.target.value; renderShiftCur()};
+    b.querySelectorAll("input[type=time]").forEach(t=>{t.value=x[t.dataset.f]; t.onchange=t.oninput=e=>{if(isHM(e.target.value))x[t.dataset.f]=e.target.value}});
+    b.querySelector(".del").onclick=()=>{S.list.splice(i,1); if(S.cur>=S.list.length)S.cur=Math.max(0,S.list.length-1); renderShiftEdit()};
+    l.appendChild(b);
+  });
+  renderShiftCur();
+}
+function renderShiftCur(){
+  const S=shDraft, sel=$("shiftCur"); sel.innerHTML="";
+  S.list.forEach((x,i)=>{const o=document.createElement("option"); o.value=i; o.textContent=x.name||`${i+1}-р ээлж`; sel.appendChild(o)});
+  sel.value=S.cur;
+  const order=S.list.map(x=>x.name||"…").join(" → ");
+  $("shiftNote").textContent=S.list.length>1?`Дараалал: ${order} → … Жагсаалтын дарааллаар ${S.every} хоног тутам солигдоно.`:"Хоёр ба түүнээс дээш ээлж нэмнэ үү.";
+}
+$("shiftOn").onchange=e=>{shDraft.on=e.target.checked; if(shDraft.on&&!shDraft.list.length) shDraft.list=SHIFT_DEFAULT().list; renderShiftEdit()};
+$("addShift").onclick=()=>{shDraft.list.push({id:"s"+Date.now(),name:"",workS:"08:00",workE:"17:00",sleepS:"23:00",sleepE:"07:00"}); renderShiftEdit();
+  const ins=$("shiftList").querySelectorAll("input.nm"); ins[ins.length-1].focus()};
+$("shiftEvery").oninput=e=>{const v=parseInt(e.target.value,10); if(v>=1&&v<=60){shDraft.every=v; renderShiftCur()}};
+$("shiftCur").onchange=e=>{shDraft.cur=+e.target.value};
+$("shiftFrom").onchange=e=>{if(/^\d{4}-\d\d-\d\d$/.test(e.target.value)) shDraft.from=e.target.value};
 
 /* ---------- views (bottom nav) ---------- */
 /* Android back button / iOS edge swipe: Settings → closes, other tab → Day, Day → leaves the app.
