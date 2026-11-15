@@ -100,3 +100,15 @@ npm test
 | `elsen_water`, `elsen_qty` | `{өдөр: аяга}`, `{өдөр: {даалгавар: тоо}}` |
 | `elsen_review`, `elsen_sleep` | `{өдөр: {r: 1–5, n: тэмдэглэл}}`, `{өдөр: {s: унтсан, w: боссон}}` (боссон өдрөөр) |
 | `elsen_backup_at`, `elsen_undo` | Сүүлд нөөцөлсөн огноо, сэргээхийн өмнөх өгөгдөл («Буцаах»-д) |
+
+## 7 хоногийн автомат сайжруулалт (зөвхөн энэ Mac дээр)
+Лхагва гараг бүр 03:00-аас (апп бүр өөр шөнө; компьютер унтарсан байсан бол дараагийн асалтад) Claude Code аппыг шалгаж
+1–3 жижиг сайжруулалт хийнэ: **`auto-improve` салбар** дээр, тусдаа хавтсанд (`../elsen-tsag-auto`, git worktree).
+Тест (`npm --prefix tests test`) давсан үед л commit хийнэ, унасан бол `git stash`-д хадгална.
+**main-д нийлүүлэхгүй, GitHub руу push хийхгүй** — та шийднэ. Тайлан `logs/`-д (git-д ордоггүй), утсанд ntfy-ээр 3 мөр тойм
+(сэдэв `~/projects/.env`-ийн `NTFY_TOPIC`).
+
+```sh
+bash scripts/auto/launchd.sh install   # суулгах (status | stop | start)
+FORCE=1 bash scripts/auto/run.sh        # одоо ажиллуулах
+```
