@@ -31,7 +31,7 @@ after(async () => { await browser?.close(); server?.close(); });
 
 // A fresh phone-sized page with empty storage; fails the test on any page error.
 async function open(t, seed, opts = {}) {
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, permissions: ['notifications'], acceptDownloads: true, ...(opts.mobile ? { isMobile: true, hasTouch: true, deviceScaleFactor: 3 } : {}), ...(opts.tz ? { timezoneId: opts.tz } : {}) });
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, permissions: ['notifications', 'clipboard-read', 'clipboard-write'], acceptDownloads: true, ...(opts.mobile ? { isMobile: true, hasTouch: true, deviceScaleFactor: 3 } : {}), ...(opts.tz ? { timezoneId: opts.tz } : {}) });
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
@@ -308,4 +308,23 @@ test('shift rotation: hours follow the running shift and switch every N days', a
   // reopening settings shows the same running shift
   await page.click('#openSet');
   assert.equal(await page.inputValue('#shiftCur'), '2');
+});
+
+test('backup by copy and paste: copies all data, paste restores it, bad text is refused', async t => {
+  const { page } = await open(t, `()=>{localStorage.elsen_pantry='["Өндөг"]'}`);
+  await page.click('#openSet');
+  await page.click('#copyBtn');
+  const txt = await page.evaluate(() => navigator.clipboard.readText());
+  assert.equal(JSON.parse(txt).app, 'elsen-tsag');
+  assert.deepEqual(JSON.parse(txt).data.elsen_pantry, ['Өндөг']);
+  await page.evaluate(() => { localStorage.elsen_pantry = '["Мах"]'; });
+  await page.click('#pasteBtn');
+  await page.waitForFunction(x => document.getElementById('pasteIn').value === x, txt);   // picked up from the clipboard
+  await page.fill('#pasteIn', 'юу ч биш');
+  await page.click('#pasteGo');
+  assert.match(await page.textContent('#toastMsg'), /нөөц биш/);
+  await page.fill('#pasteIn', txt);
+  await page.click('#pasteGo');
+  await Promise.all([page.waitForNavigation(), page.click('#toastBtn')]);
+  assert.equal(await page.evaluate(() => localStorage.elsen_pantry), '["Өндөг"]');
 });

@@ -278,6 +278,8 @@ select{background:var(--card);border:1px solid var(--line);color:var(--ink);bord
 .shbox .edit{display:flex;gap:8px;margin-bottom:8px}
 .shbox .row{margin-bottom:6px}
 input[type=date]{background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:9px 10px;font:inherit;font-size:14px;color-scheme:dark;min-height:38px}
+.pair2{display:flex;gap:8px}.pair2 .btn{flex:1}
+textarea{width:100%;background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:9px 10px;font:12px/1.4 ui-monospace,Menlo,monospace;resize:vertical;margin-top:8px}
 .switch small.hint{display:block;font-size:11px;color:var(--dim);margin-top:2px}
 .switch input{position:absolute;opacity:0;width:1px;height:1px}
 .switch i{flex:none;width:44px;height:26px;border-radius:13px;background:var(--line);position:relative;transition:.2s}
@@ -518,6 +520,11 @@ input[type=time]::-webkit-date-and-time-value{text-align:left}
     <div class="note" id="backupNote"></div>
     <button class="btn" id="exportBtn">💾 Нөөц хуулбар хадгалах</button>
     <button class="btn" id="importBtn">📂 Нөөцөөс сэргээх</button>
+    <div class="pair2"><button class="btn" id="copyBtn">📋 Хуулах</button><button class="btn" id="pasteBtn">📥 Буулгаж сэргээх</button></div>
+    <div id="pasteBox" hidden>
+      <textarea id="pasteIn" rows="4" placeholder="Хуулсан нөөцөө энд буулгана уу ({&quot;app&quot;:&quot;elsen-tsag&quot;… гэж эхэлсэн урт текст)" spellcheck="false" autocomplete="off"></textarea>
+      <button class="btn primary" id="pasteGo">Сэргээх</button>
+    </div>
     <input type="file" id="importFile" accept="application/json,.json" hidden>
     <div id="appSec" hidden>
       <div class="sub">Апп</div>
@@ -1738,8 +1745,31 @@ $("exportBtn").onclick=exportBackup;
 $("importBtn").onclick=()=>$("importFile").click();
 $("importFile").onchange=async e=>{
   const f=e.target.files&&e.target.files[0]; e.target.value=""; if(!f) return;
-  let obj=null; try{obj=JSON.parse(await f.text())}catch(err){}
-  if(!obj||obj.app!=="elsen-tsag"||!obj.data||typeof obj.data!=="object"){toast("Энэ файл Элсэн цагийн нөөц биш байна");return}
+  offerRestore(await f.text(),"Энэ файл Элсэн цагийн нөөц биш байна");
+};
+// Copy / paste: works everywhere, even where files can't be saved (claude.ai, some in-app browsers).
+$("copyBtn").onclick=async()=>{
+  const txt=JSON.stringify(backupData());
+  let ok=false;
+  try{await navigator.clipboard.writeText(txt); ok=true}catch(e){}
+  if(!ok){ // older / restricted browsers: copy from a selected text field
+    const t=$("pasteIn"); $("pasteBox").hidden=false; t.value=txt; t.focus(); t.select();
+    try{ok=document.execCommand("copy")}catch(e){}
+    if(!ok){toast("Доорх текстийг бүхэлд нь сонгоод хуулна уу"); return}
+    t.value=""; $("pasteBox").hidden=true;
+  }
+  store.set("elsen_backup_at",Date.now()); renderBackup();
+  toast(`Нөөц хуулагдлаа ✓ (${Math.round(txt.length/1024)||1} КБ). Тэмдэглэл, мессеж, имэйлд буулгаж хадгална уу`);
+};
+$("pasteBtn").onclick=async()=>{
+  $("pasteBox").hidden=false; const t=$("pasteIn");
+  try{const c=await navigator.clipboard.readText(); if(c&&c.includes("elsen-tsag")) t.value=c}catch(e){}
+  t.focus();
+};
+$("pasteGo").onclick=()=>offerRestore($("pasteIn").value,"Энэ текст Элсэн цагийн нөөц биш байна. Бүтэн хуулсан эсэхээ шалгана уу");
+function offerRestore(text,badMsg){
+  let obj=null; try{obj=JSON.parse(String(text).trim())}catch(err){}
+  if(!obj||obj.app!=="elsen-tsag"||!obj.data||typeof obj.data!=="object"){toast(badMsg);return}
   const days=Object.keys(obj.data.elsen_hist||{}).filter(k=>Object.keys(obj.data.elsen_hist[k]||{}).length).length;
   toast(`${days} өдрийн түүхтэй нөөц (${fmtDate(obj.exported||Date.now())}). Одоогийн өгөгдлийг солих уу?`,"Сэргээх",()=>{
     store.set("elsen_undo",backupData());              // one-step undo, offered after the reload
