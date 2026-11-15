@@ -624,9 +624,11 @@ function shiftOn(k){
 let schMemo={k:null,v:null};
 function sch(k){
   k=k||dayKey(new Date());
-  if(schMemo.k===k&&schMemo.c===cfg) return schMemo.v;
+  // cheap check (blockAt runs thousands of times a second in loops): saving settings replaces cfg.shifts
+  const sig=k+cfg.sleepS+cfg.sleepE+cfg.workS+cfg.workE;
+  if(schMemo.sig===sig&&schMemo.ref===cfg.shifts) return schMemo.v;
   const sh=shiftOn(k), v=sh?sh.shift:cfg;
-  schMemo={k,c:cfg,v:{sleepS:toMin(v.sleepS),sleepE:toMin(v.sleepE),workS:toMin(v.workS),workE:toMin(v.workE)}};
+  schMemo={sig,ref:cfg.shifts,v:{sleepS:toMin(v.sleepS),sleepE:toMin(v.sleepE),workS:toMin(v.workS),workE:toMin(v.workE)}};
   return schMemo.v;
 }
 function blockAt(m){
@@ -639,7 +641,7 @@ function renderShiftInfo(){
   const el=$("shiftInfo"), k=dayKey(new Date()), sh=shiftOn(k);
   el.hidden=!sh; if(!sh) return;
   const nd=dayDate(sh.nextKey);
-  el.innerHTML=`<span>🔁 <b></b> · ${sh.day}/${sh.every} дэх өдөр</span><span>${MONTHS[nd.getMonth()]}ын ${nd.getDate()} (${WD[nd.getDay()]})-аас <b></b></span>`;
+  el.innerHTML=`<span>🔁 <b></b> · ${sh.day}/${sh.every} дэх өдөр</span><span>Дараа нь: <b></b> · ${MONTHS[nd.getMonth()]}ын ${nd.getDate()}, ${WD[nd.getDay()]}</span>`;
   const bs=el.querySelectorAll("b"); bs[0].textContent=sh.shift.name; bs[1].textContent=sh.next.name;
   if(sh.next===sh.shift) el.lastChild.hidden=true;
 }

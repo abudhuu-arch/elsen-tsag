@@ -283,3 +283,29 @@ test('the clock keeps running even if one update throws; hero animates only on t
   assert.equal(await page.evaluate(() => gRaf), 0);
   assert.equal(await page.evaluate(() => cfg.sandSound), false);
 });
+
+test('shift rotation: hours follow the running shift and switch every N days', async t => {
+  const { page } = await open(t);
+  await page.click('#openSet');
+  await page.check('#shiftOn', { force: true });
+  assert.ok(await page.isVisible('#shiftSec')); assert.ok(!(await page.isVisible('#fixedSch')));
+  assert.equal(await page.locator('#shiftList .shbox').count(), 3);
+  // night shift is running since 2 days ago, rotates every 7 days
+  await page.selectOption('#shiftCur', '2');
+  await page.fill('#shiftFrom', keyAgo(2)); await page.dispatchEvent('#shiftFrom', 'change');
+  await page.click('#save');
+  const r = await page.evaluate(() => {
+    const k = dayKey(new Date()), now = shiftOn(k), later = shiftOn(addDays(k, 5)), before = shiftOn(addDays(k, -3));
+    return { now: now.shift.name, day: now.day, later: later.shift.name, laterDay: later.day, before: before.shift.name,
+      sch: sch(k), b23: blockAt(23 * 60), b12: blockAt(12 * 60), saved: JSON.parse(localStorage.elsen_cfg).shifts.on };
+  });
+  assert.equal(r.now, 'Шөнийн ээлж'); assert.equal(r.day, 3);
+  assert.equal(r.later, 'Өглөөний ээлж'); assert.equal(r.laterDay, 1);   // wraps round to the first shift
+  assert.equal(r.before, 'Оройн ээлж');
+  assert.equal(r.b23, 'work'); assert.equal(r.b12, 'sleep');
+  assert.ok(r.saved);
+  assert.match(await page.textContent('#shiftInfo'), /Шөнийн ээлж · 3\/7/);
+  // reopening settings shows the same running shift
+  await page.click('#openSet');
+  assert.equal(await page.inputValue('#shiftCur'), '2');
+});
