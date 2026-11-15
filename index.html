@@ -286,6 +286,24 @@ input[type=date]{background:var(--card);border:1px solid var(--line);color:var(-
 .rates button[aria-checked=true]{border-color:var(--sand);color:var(--sand3);background:#2a2219}
 .rates button[aria-checked=true] span{filter:none;opacity:1;transform:scale(1.12)}
 #revNote{width:100%}
+/* weekly report */
+.wknav{display:flex;gap:6px}
+.wknav button{width:34px;height:34px;border-radius:9px;border:1px solid var(--line);background:var(--bg2);color:var(--mute);font:inherit;font-size:16px;cursor:pointer}
+.wknav button:disabled{opacity:.3;cursor:default}
+.wk .wh{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.wk .wh b{font-size:13px;color:var(--mute);font-weight:500}
+.wk .big{font-family:"Cormorant Garamond",serif;font-size:44px;font-weight:600;line-height:1;color:var(--sand3);font-variant-numeric:lining-nums}
+.wk .big small{font-family:Manrope,system-ui,sans-serif;font-size:13px;color:var(--mute);font-weight:500;margin-left:6px}
+.wk .wbars{display:flex;gap:5px;align-items:flex-end;margin:12px 0 4px}
+.wk .wbars div{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
+.wk .wbars i{display:block;flex:none;width:100%;border-radius:4px 4px 2px 2px;background:var(--sand2)}
+.wk .wbars i.full{background:var(--ok)}
+.wk .wbars i.none{background:var(--line)}
+.wk .wbars span{font-size:10px;color:var(--dim)}
+.wk .wl{display:flex;gap:10px;font-size:14px;padding:7px 0;border-top:1px solid var(--line);line-height:1.4}
+.wk .wl:first-of-type{margin-top:8px}
+.wk .wl .ic{flex:none;width:22px;text-align:center}
+.wk .wl em{font-style:normal;color:var(--mute)}
 /* sleep */
 .slrow{display:flex;gap:10px;align-items:flex-end}
 .slrow label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--mute);flex:1;min-width:0}
@@ -432,6 +450,11 @@ input[type=time]::-webkit-date-and-time-value{text-align:left}
     <div class="small" id="remHint" style="text-align:center" hidden>⏰ Сануулга зөвхөн апп нээлттэй үед ирнэ</div>
   </section>
 
+  <section id="wkDaySec" hidden>
+    <div class="sh"><h2>7 хоногийн тайлан</h2><div class="count">Ням гараг</div></div>
+    <div class="card wk" id="wkDay"></div>
+  </section>
+
   <section id="reviewSec" hidden>
     <div class="sh"><h2>Өдрийн тойм</h2><div class="count" id="revWhen"></div></div>
     <div class="card review">
@@ -499,6 +522,11 @@ input[type=time]::-webkit-date-and-time-value{text-align:left}
     </div>
     <div class="tiles" id="tiles"></div>
     <div class="insight" id="insight" hidden></div>
+    <section>
+      <div class="sh"><h2>7 хоногийн тайлан</h2>
+        <div class="wknav"><button id="wkPrev" aria-label="Өмнөх 7 хоног">‹</button><button id="wkNext" aria-label="Дараагийн 7 хоног">›</button></div></div>
+      <div class="card wk" id="wkStat"></div>
+    </section>
     <section>
       <div class="sh"><h2>Өдөр бүрийн биелэлт</h2></div>
       <div class="card">
@@ -965,6 +993,7 @@ function renderTasks(){
   if(typeof renderWater==="function") renderWater();
   if(typeof renderReview==="function") renderReview();
   if(typeof renderSleep==="function") renderSleep();
+  if(typeof renderWeekDay==="function") renderWeekDay();
 }
 /* ---------- amounts logged on tasks (km run, pages read, reps…) ---------- */
 let qty=store.get("elsen_qty",{});
@@ -1259,7 +1288,7 @@ function tick(){
   $("nextBlock").textContent=nx?NAMES[nx.b]:"—";
   if(nx){const t=(Math.floor(m)+nx.at)%1440;$("nextSub").textContent=`${pad(Math.floor(t/60))}:${pad(t%60)}-д`}
 
-  if(n.getMinutes()!==lastMin){lastMin=n.getMinutes(); if(typeof renderReview==="function") renderReview()}
+  if(n.getMinutes()!==lastMin){lastMin=n.getMinutes(); if(typeof renderReview==="function"){renderReview(); renderWeekDay()}}
   $("date").textContent=`${n.getFullYear()} оны ${MONTHS[n.getMonth()]}ын ${n.getDate()}, ${WD[n.getDay()]}`;
   const k=dayKey(n);
   if(k!==lastKey){ // new day: hourglass flips, list resets
@@ -1649,7 +1678,7 @@ function renderStats(){
   // mark the selected day (statSel may have been defaulted above)
   cal.querySelectorAll("button").forEach((b,i)=>{const x=days[i]; if(x) b.classList.toggle("sel",x.on&&x.k===statSel)});
 
-  renderMore(counted,today);
+  renderMore(counted,today); renderWeekStat();
   // per task
   const pt=$("perTask"); pt.innerHTML="";
   if(!counted.length){pt.innerHTML=`<div class="empty">Энэ сард бүртгэл алга</div>`; return}
@@ -1669,6 +1698,69 @@ function renderStats(){
     pt.appendChild(r);
   });
 }
+/* ---------- weekly report (Monday–Sunday) ---------- */
+const mondayOf=k=>addDays(k,-((dayDate(k).getDay()+6)%7));
+function weekData(mon){
+  const today=dayKey(new Date()), first=firstUseKey(), days=[];
+  for(let i=0;i<7;i++){const k=addDays(mon,i); days.push({k,i,on:k>=first&&k<=today,s:scoreFor(k)})}
+  const on=days.filter(d=>d.on);
+  const c=on.reduce((a,d)=>a+d.s.c,0), tot=on.reduce((a,d)=>a+d.s.tot,0);
+  return {days,on,pct:tot?Math.round(c/tot*100):null,full:on.filter(d=>d.s.tot&&d.s.c===d.s.tot).length};
+}
+function renderWeekReport(box,mon){
+  const W=weekData(mon), WDm=["Да","Мя","Лх","Пү","Ба","Бя","Ня"], end=dayDate(addDays(mon,6)), st=dayDate(mon);
+  const range=`${MONTHS[st.getMonth()]}ын ${st.getDate()} – ${st.getMonth()===end.getMonth()?"":MONTHS[end.getMonth()]+"ын "}${end.getDate()}`;
+  if(!W.on.length||W.pct===null){box.innerHTML=`<div class="wh"><b>${range}</b></div><div class="empty">Энэ 7 хоногт бүртгэл алга</div>`; return}
+  const P=weekData(addDays(mon,-7));
+  let delta=""; if(P.pct!=null&&P.on.length>=4){const d=W.pct-P.pct; delta=d>0?` · ▲ ${d}% өмнөх 7 хоногоос`:d<0?` · ▼ ${-d}% өмнөх 7 хоногоос`:" · өмнөхтэй ижил"}
+  let h=`<div class="wh"><b>${range}</b><b>${W.on.length}/7 өдөр</b></div>
+    <div class="big">${W.pct}%<small>биелэлт${delta}</small></div><div class="wbars">`;
+  W.days.forEach(d=>{const r=d.s.tot?d.s.c/d.s.tot:0;
+    h+=`<div title="${WD_FULL[(d.i+1)%7]}: ${d.s.c}/${d.s.tot}"><i class="${!d.on?"none":r>=1?"full":""}" style="height:${d.on?Math.max(3,Math.round(r*36)):3}px"></i><span>${WDm[d.i]}</span></div>`});
+  h+=`</div>`;
+  const lines=[];
+  // best day
+  const rated=W.on.filter(d=>d.s.tot&&d.s.c), best=rated.sort((a,b)=>b.s.c/b.s.tot-a.s.c/a.s.tot||b.s.c-a.s.c)[0];
+  if(W.full>1) lines.push(["🏆",`<b>${W.full}</b> өдөр бүгдийг биелүүлсэн`]);
+  else if(best) lines.push(["🏆",`Хамгийн сайн өдөр: <b>${WD_FULL[(best.i+1)%7]}</b> <em>${best.s.c}/${best.s.tot}</em>`]);
+  // weakest task (lowest share of the days it was on the list)
+  const per={}; W.on.forEach(d=>{(snap[d.k]||cfg.tasks.map(t=>t.id)).forEach(id=>{const p=per[id]||(per[id]={n:0,c:0}); p.n++; if((hist[d.k]||{})[id])p.c++})});
+  const nameOf=id=>{const t=cfg.tasks.find(x=>x.id===id);return t?t.name:null};
+  const weak=Object.entries(per).filter(([id,p])=>nameOf(id)&&p.c<p.n).sort((a,b)=>a[1].c/a[1].n-b[1].c/b[1].n)[0];
+  if(weak) lines.push(["🌱",`Сул даалгавар: <b class="nm" data-id="${weak[0]}"></b> <em>${weak[1].c}/${weak[1].n} өдөр</em>`]);
+  else lines.push(["🎉","Бүх даалгаврыг өдөр бүр биелүүлсэн"]);
+  // amounts logged
+  cfg.tasks.filter(t=>t.unit).forEach(t=>{const sum=W.on.reduce((a,d)=>a+((qty[d.k]||{})[t.id]||0),0);
+    if(sum) lines.push(["📏",`<b class="nm" data-id="${t.id}"></b>: ${fmtQ(sum)} <span class="u" data-id="${t.id}"></span>`])});
+  const sl=W.on.filter(d=>sleepLog[d.k]); if(sl.length) lines.push(["😴",`Нойр дунджаар <b>${fmtDur(sl.reduce((a,d)=>a+sleepMin(sleepLog[d.k]),0)/sl.length)}</b> <em>${sl.length} шөнө</em>`]);
+  const wa=W.on.filter(d=>water[d.k]); if(wa.length) lines.push(["💧",`Ус дунджаар <b>${(wa.reduce((a,d)=>a+water[d.k],0)/wa.length).toFixed(1).replace(/\.0$/,"")}</b> аяга`]);
+  const rv=W.on.filter(d=>review[d.k]); if(rv.length) lines.push(["⭐",`Өдрийн үнэлгээ <b>${(rv.reduce((a,d)=>a+review[d.k].r,0)/rv.length).toFixed(1)}</b> / 5`]);
+  h+=lines.map(([i,t])=>`<div class="wl"><span class="ic">${i}</span><span>${t}</span></div>`).join("");
+  box.innerHTML=h;
+  box.querySelectorAll(".nm").forEach(e=>e.textContent=nameOf(e.dataset.id));      // names are user text: never as HTML
+  box.querySelectorAll(".u").forEach(e=>e.textContent=(cfg.tasks.find(x=>x.id===e.dataset.id)||{}).unit||"");
+}
+let wkMon=null;
+function renderWeekStat(){
+  const cur=mondayOf(dayKey(new Date())); if(!wkMon||wkMon>cur) wkMon=cur;
+  renderWeekReport($("wkStat"),wkMon);
+  $("wkNext").disabled=wkMon>=cur; $("wkPrev").disabled=wkMon<=mondayOf(firstUseKey());
+}
+$("wkPrev").onclick=()=>{wkMon=addDays(wkMon,-7); renderWeekStat()};
+$("wkNext").onclick=()=>{wkMon=addDays(wkMon,7); renderWeekStat()};
+// Sunday: the week's report on the Day tab, and once in the evening as a notification.
+function renderWeekDay(){
+  const k=dayKey(new Date()), sun=dayDate(k).getDay()===0;
+  $("wkDaySec").hidden=!sun; if(!sun) return;
+  renderWeekReport($("wkDay"),mondayOf(k));
+  const {end}=dayBounds(new Date()), mon=mondayOf(k);
+  if(end-Date.now()<=4*3600000&&store.get("elsen_week_sent","")!==mon){
+    store.set("elsen_week_sent",mon);
+    const W=weekData(mon);
+    if(W.pct!==null) notify("7 хоногийн тайлан",`Энэ 7 хоногийн биелэлт ${W.pct}%. ${W.full} өдөр бүгдийг биелүүлсэн.`,"week");
+  }
+}
+
 // Extra things logged on a day (water, sleep, rating…): one short text each, for the day details.
 function dayExtras(k){
   const out=[];

@@ -401,3 +401,28 @@ test('sleep log: times give the duration, 7-day average, stats', async t => {
   assert.match(await page.textContent('#dayInfo'), /😴 7ц 15м \(23:30–06:45\)/);
   assert.match(await page.textContent('#moreTiles'), /Нойр · дундаж/);
 });
+
+test('weekly report: Sunday card on the Day tab, best day, weak task, totals; also in Stats', async t => {
+  // a fixed Sunday evening; data for the Monday..Sunday before it
+  const sun = new Date(2026, 10, 15, 21, 0, 0);
+  const { page } = await open(t, null, { time: sun });
+  await page.evaluate(() => {
+    const mon = '2026-11-09', all = { t1: '1', t2: '1', t3: '1', t4: '1', t5: '1', t6: '1' };
+    for (let i = 0; i < 7; i++) { const k = addDays(mon, i); snap[k] = cfg.tasks.map(x => x.id); hist[k] = { ...all }; }
+    delete hist['2026-11-11'].t5; delete hist['2026-11-12'].t5; delete hist['2026-11-12'].t2;   // Wed, Thu miss some
+    cfg.tasks[3].unit = 'км'; qty['2026-11-10'] = { t4: 4 }; qty['2026-11-13'] = { t4: 6.5 };
+    water['2026-11-09'] = 6; water['2026-11-10'] = 8;
+    renderTasks();
+  });
+  assert.ok(await page.isVisible('#wkDaySec'));
+  const txt = await page.textContent('#wkDay');
+  assert.match(txt, /93%/);                                   // 39 of 42
+  assert.match(txt, /5 өдөр бүгдийг биелүүлсэн/);
+  assert.match(txt, /Сул даалгавар: Ном унших 30 минут 5\/7 өдөр/);
+  assert.match(txt, /Алхах 30 минут: 10\.5 км/);
+  assert.match(txt, /Ус дунджаар 7 аяга/);
+  assert.equal(await page.locator('#wkDay .wbars i.full').count(), 5);
+  await page.click('nav.tabs button[data-v="v-stat"]');
+  assert.match(await page.textContent('#wkStat'), /93%/);
+  assert.ok(await page.isDisabled('#wkNext'));
+});
