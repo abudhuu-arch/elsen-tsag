@@ -1,5 +1,5 @@
 /* Элсэн цаг — service worker: works offline by caching every file the app needs. */
-const VERSION = "elsen-v4";
+const VERSION = "elsen-v5";
 const SHELL = [
   "./",
   "./index.html",
@@ -40,7 +40,8 @@ self.addEventListener("message", e => {
 // Page: network first (3 s), fall back to cache so the app opens offline.
 async function page(req) {
   const cache = await caches.open(VERSION);
-  const net = fetch(req).then(res => {
+  // no-cache: revalidate with the server, so a host's HTTP cache (GitHub Pages: 10 min) can't serve an old page
+  const net = fetch(req.url, { cache: "no-cache", credentials: "same-origin" }).then(res => {
     if (res.ok) cache.put("./index.html", res.clone());
     return res;
   });
@@ -58,7 +59,7 @@ async function page(req) {
 async function asset(req) {
   const cache = await caches.open(VERSION);
   const cached = await cache.match(req, { ignoreSearch: true });
-  const net = fetch(req).then(res => { if (res.ok) cache.put(req, res.clone()); return res; }).catch(() => null);
+  const net = fetch(req, { cache: "no-cache" }).then(res => { if (res.ok) cache.put(req, res.clone()); return res; }).catch(() => null);
   return cached || (await net) || Response.error();
 }
 

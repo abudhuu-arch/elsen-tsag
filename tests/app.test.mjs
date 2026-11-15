@@ -31,7 +31,7 @@ after(async () => { await browser?.close(); server?.close(); });
 
 // A fresh phone-sized page with empty storage; fails the test on any page error.
 async function open(t, seed, opts = {}) {
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, permissions: ['notifications'], acceptDownloads: true, ...(opts.mobile ? { isMobile: true, hasTouch: true, deviceScaleFactor: 3 } : {}) });
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, permissions: ['notifications'], acceptDownloads: true, ...(opts.mobile ? { isMobile: true, hasTouch: true, deviceScaleFactor: 3 } : {}), ...(opts.tz ? { timezoneId: opts.tz } : {}) });
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
@@ -58,7 +58,7 @@ test('loads with all four tabs and the hourglass', async t => {
     await page.click(`nav.tabs button[data-v="${v}"]`);
     assert.ok(await page.$eval('#' + v, e => e.offsetHeight > 0), v);
   }
-  assert.match(await page.textContent('#clock'), /^\d\d:\d\d$/);
+  assert.match(await page.textContent('#clock'), /^\d\d:\d\d:\d\d$/);
   assert.equal(await page.locator('#tasks .task').count(), 6);
 });
 
@@ -82,7 +82,7 @@ test('corrupted or hand-edited data does not break the app', async t => {
   const c = await page.evaluate(() => cfg);
   assert.equal(c.dayStart, '00:00'); assert.equal(c.sleepS, '22:30');
   assert.deepEqual(c.tasks, [{ id: 't1', name: 'Ном 20 мин', min: 20, rem: '' }, { id: '7', name: 'Гүйх', min: 600, rem: '' }]);
-  assert.match(await page.textContent('#clock'), /^\d\d:\d\d$/);
+  assert.match(await page.textContent('#clock'), /^\d\d:\d\d:\d\d$/);
   for (const v of ['v-sw', 'v-food', 'v-stat']) await page.click(`nav.tabs button[data-v="${v}"]`);
 });
 
@@ -248,4 +248,37 @@ test('phone: back button, settings scroll lock, reminder clear, keyboard, 16px f
   // iPhone launch screens exist for every <link> declared
   for (const href of await page.$$eval('link[rel=apple-touch-startup-image]', ls => ls.map(l => l.getAttribute('href'))))
     assert.ok(fs.existsSync(path.join(ROOT, href)), href);
+});
+
+test('daylight saving days (Prague: 23 h in March, 25 h in October) keep the day and the sand right', async t => {
+  const { page } = await open(t, null, { tz: 'Europe/Prague' });
+  const r = await page.evaluate(() => {
+    cfg.dayStart = '05:00';
+    const H = 3600000, b = d => { const x = dayBounds(d); return (x.end - x.start) / H; };
+    const frac = d => { const x = dayBounds(d); return (d - x.start) / (x.end - x.start); };
+    const fall = new Date(2026, 9, 25, 2, 59);          // 02:59 CEST, a minute later the clock shows 02:00 CET
+    return {
+      spring: dayKey(new Date(2026, 2, 29, 5, 30)), beforeStart: dayKey(new Date(2026, 9, 25, 4, 30)),
+      // with the day starting 05:00 the 02:00 change falls in the day that began the morning before
+      hSpring: b(new Date(2026, 2, 28, 12)), hFall: b(new Date(2026, 9, 24, 12)), hNormal: b(new Date(2026, 10, 15, 12)),
+      grows: frac(new Date(fall.getTime() + 60000)) > frac(fall),
+      week: (() => { cfg.dayStart = '00:00'; return true; })(),
+    };
+  });
+  assert.equal(r.spring, '2026-03-29');
+  assert.equal(r.beforeStart, '2026-10-24');
+  assert.deepEqual([r.hSpring, r.hFall, r.hNormal], [23, 25, 24]);
+  assert.ok(r.grows, 'sand never flows backwards when the clocks go back');
+});
+
+test('the clock keeps running even if one update throws; hero animates only on the Day tab', async t => {
+  const { page } = await open(t);
+  await page.evaluate(() => { const orig = checkTimers; let once = true; window.checkTimers = checkTimers = () => { if (once) { once = false; throw new Error('boom'); } orig(); }; });
+  const a = await page.textContent('#clock');
+  await page.waitForFunction(x => document.getElementById('clock').textContent !== x, a, { timeout: 3000 });
+  assert.match(await page.textContent('#clock'), /^\d\d:\d\d:\d\d$/);
+  assert.ok(await page.evaluate(() => gRaf !== 0));
+  await page.click('nav.tabs button[data-v="v-stat"]');
+  assert.equal(await page.evaluate(() => gRaf), 0);
+  assert.equal(await page.evaluate(() => cfg.sandSound), false);
 });

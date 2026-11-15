@@ -48,8 +48,22 @@ h1{font-family:"Cormorant Garamond",serif;font-weight:700;font-size:30px;letter-
 .iconbtn{background:var(--card);border:1px solid var(--line);color:var(--sand);width:42px;height:42px;border-radius:12px;font-size:20px;cursor:pointer}
 
 .hero{display:flex;flex-direction:column;align-items:center;margin:8px 0 6px}
-.glass{width:200px;height:300px;filter:drop-shadow(0 18px 40px rgba(227,178,107,.12))}
-.clock{font-family:"Cormorant Garamond",serif;font-size:56px;font-weight:600;line-height:1;margin-top:6px;font-variant-numeric:tabular-nums;color:var(--ink)}
+/* hourglass inside a seconds ring (one turn per minute) */
+.hg{position:relative;width:300px;height:300px;max-width:100%}
+.hg .ring{position:absolute;inset:0;width:100%;height:100%}
+.gwrap{position:absolute;left:50%;top:50%;width:140px;height:224px;margin:-112px 0 0 -70px}
+.gwrap.flip{animation:flip 1.6s cubic-bezier(.6,0,.3,1) both}
+@keyframes flip{0%{transform:rotate(0)}15%{transform:rotate(-8deg)}100%{transform:rotate(180deg)}}
+.glass{position:absolute;inset:0;width:100%;height:100%;filter:drop-shadow(0 18px 40px rgba(227,178,107,.12))}
+#grains{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+#ringTicks line{stroke:var(--dim);stroke-width:1.5;stroke-linecap:round}
+#ringTicks line.q{stroke:var(--mute);stroke-width:2}
+.clock{font-family:"Cormorant Garamond",serif;font-size:56px;font-weight:600;line-height:1;margin-top:4px;font-variant-numeric:lining-nums tabular-nums;color:var(--ink);display:flex;align-items:baseline}
+.clock .d{display:inline-block;min-width:.5em;text-align:center}
+.clock .d.roll{animation:roll .45s cubic-bezier(.2,.7,.3,1)}
+.clock .ss{font-size:30px;color:var(--sand);margin-left:2px}
+.clock .ss .d{min-width:.52em}
+@keyframes roll{0%{transform:translateY(-.35em);opacity:0;filter:blur(2px)}100%{transform:none;opacity:1;filter:none}}
 .left{font-size:13px;color:var(--mute);margin-top:6px;text-align:center}
 .left b{color:var(--sand);font-weight:600}
 
@@ -58,6 +72,11 @@ h1{font-family:"Cormorant Garamond",serif;font-weight:700;font-size:30px;letter-
 .pill .k{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.8px}
 .pill .v{font-size:16px;font-weight:600;margin-top:4px}
 .pill .s{font-size:12px;color:var(--mute);margin-top:2px}
+.bprog{height:4px;border-radius:2px;background:var(--bg2);margin-top:8px;overflow:hidden}
+.bprog i{display:block;height:100%;width:0;border-radius:2px;background:var(--free);transition:width 1s linear}
+#nowBlock[data-b=work]~.bprog i{background:var(--work)}
+#nowBlock[data-b=sleep]~.bprog i{background:var(--sleep)}
+#nowBlock[data-b=free]~.bprog i{background:#6f9a7c}
 
 .bar{position:relative;height:16px;border-radius:8px;overflow:hidden;background:var(--free);margin-top:18px;border:1px solid var(--line)}
 .seg{position:absolute;top:0;bottom:0}
@@ -253,6 +272,7 @@ select{background:var(--card);border:1px solid var(--line);color:var(--ink);bord
 .mv button:disabled{opacity:.3;cursor:default}
 .treset{flex:none;width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:none;color:var(--mute);font-size:17px;cursor:pointer;margin-right:-4px}
 .switch{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 2px;font-size:14px;color:var(--mute);cursor:pointer}
+.switch small.hint{display:block;font-size:11px;color:var(--dim);margin-top:2px}
 .switch input{position:absolute;opacity:0;width:1px;height:1px}
 .switch i{flex:none;width:44px;height:26px;border-radius:13px;background:var(--line);position:relative;transition:.2s}
 .switch i::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:var(--mute);transition:.2s}
@@ -300,7 +320,17 @@ input[type=time]::-webkit-date-and-time-value{text-align:left}
 
   <div class="view on" id="v-day">
   <div class="hero">
-    <svg class="glass" viewBox="0 0 200 320" aria-hidden="true">
+    <div class="hg" id="hg" aria-hidden="true">
+    <svg class="ring" viewBox="0 0 300 300">
+      <g id="ringTicks"></g>
+      <circle cx="150" cy="150" r="140" fill="none" stroke="var(--line)" stroke-width="1.5"/>
+      <circle id="ringArc" cx="150" cy="150" r="140" fill="none" stroke="url(#ringG)" stroke-width="2.5" stroke-linecap="round"
+        stroke-dasharray="879.65" stroke-dashoffset="879.65" transform="rotate(-90 150 150)"/>
+      <circle id="ringDot" cx="150" cy="10" r="4" fill="var(--sand3)"/>
+      <defs><linearGradient id="ringG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#c98f45"/><stop offset="1" stop-color="#f3d9a6"/></linearGradient></defs>
+    </svg>
+    <div class="gwrap" id="gwrap">
+    <svg class="glass" viewBox="0 0 200 320">
       <defs>
         <clipPath id="topC"><path d="M44,32 L156,32 C156,98 108,132 103,160 L97,160 C92,132 44,98 44,32Z"/></clipPath>
         <clipPath id="botC"><path d="M97,160 L103,160 C108,188 156,222 156,288 L44,288 C44,222 92,188 97,160Z"/></clipPath>
@@ -333,12 +363,15 @@ input[type=time]::-webkit-date-and-time-value{text-align:left}
       <rect x="162" y="32" width="6" height="256" rx="3" fill="#5c3c24"/>
       <path d="M60,40 C60,80 80,110 92,130" stroke="rgba(255,255,255,.18)" stroke-width="2" fill="none" stroke-linecap="round"/>
     </svg>
-    <div class="clock" id="clock">--:--</div>
+    <canvas id="grains"></canvas>
+    </div>
+    </div>
+    <div class="clock" id="clock" role="timer" aria-label="Одоогийн цаг">--:--:--</div>
     <div class="left" id="left"></div>
   </div>
 
   <div class="now">
-    <div class="pill"><div class="k">Одоо</div><div class="v" id="nowBlock">—</div><div class="s" id="nowSub"></div></div>
+    <div class="pill"><div class="k">Одоо</div><div class="v" id="nowBlock">—</div><div class="s" id="nowSub"></div><div class="bprog" hidden><i id="nowProg"></i></div></div>
     <div class="pill"><div class="k">Дараа нь</div><div class="v" id="nextBlock">—</div><div class="s" id="nextSub"></div></div>
   </div>
 
@@ -461,6 +494,7 @@ input[type=time]::-webkit-date-and-time-value{text-align:left}
     <button class="btn" id="notifBtn" hidden>🔔 Сануулга зөвшөөрөх</button>
     <button class="btn" id="notifTest" hidden>Туршиж үзэх</button>
     <label class="switch"><span>🔊 Дуу ба чичиргээ</span><input type="checkbox" id="soundOn" checked><i aria-hidden="true"></i></label>
+    <label class="switch"><span>🏜 Элс урсах намуухан дуу <small class="hint">Өдөр таб нээлттэй үед</small></span><input type="checkbox" id="sandOn"><i aria-hidden="true"></i></label>
     <div class="note">ℹ️ Сануулга зөвхөн апп нээлттэй үед ажиллана. Апп хаалттай үед өнгөрсөн сануулгыг дараа нээхэд улаанаар тэмдэглэнэ. Таймер явж байхад дэлгэц унтрахгүй.</div>
     <div class="sub">Өгөгдөл</div>
     <div class="note" id="backupNote"></div>
@@ -504,6 +538,7 @@ const isHM=s=>typeof s==="string"&&/^([01]\d|2[0-3]):[0-5]\d$/.test(s);
 const isObj=o=>!!o&&typeof o==="object"&&!Array.isArray(o);
 ["dayStart","sleepS","sleepE","workS","workE"].forEach(k=>{if(!isHM(cfg[k]))cfg[k]=DEFAULT[k]});
 if(!Array.isArray(cfg.tasks)) cfg.tasks=DEFAULT.tasks;
+cfg.sandSound=cfg.sandSound===true;          // off unless turned on
 cfg.tasks=cfg.tasks.filter(t=>isObj(t)&&t.id!=null&&typeof t.name==="string").map(t=>{
   const m=/(\d+)\s*(минут|мин)/i.exec(t.name);
   const min=typeof t.min==="number"&&isFinite(t.min)?Math.max(0,Math.min(600,Math.round(t.min))):(m?Math.min(600,+m[1]):0);
@@ -529,10 +564,22 @@ const fmtDur = m => {m=Math.max(0,Math.round(m));const h=Math.floor(m/60),mm=m%6
 const MONTHS=["1-р сар","2-р сар","3-р сар","4-р сар","5-р сар","6-р сар","7-р сар","8-р сар","9-р сар","10-р сар","11-р сар","12-р сар"];
 const WD=["Ням","Дав","Мяг","Лха","Пүр","Баа","Бям"];
 
+// The "day" runs from cfg.dayStart to the next cfg.dayStart by the wall clock. Decided from the wall clock,
+// not by subtracting fixed milliseconds, so daylight-saving days (23 h / 25 h) land on the right date.
+const keyOfDate=x=>`${x.getFullYear()}-${pad(x.getMonth()+1)}-${pad(x.getDate())}`;
 function dayKey(d){
-  const x=new Date(d.getTime()-toMin(cfg.dayStart)*60000);
-  return `${x.getFullYear()}-${pad(x.getMonth()+1)}-${pad(x.getDate())}`;
+  const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());
+  if(d.getHours()*60+d.getMinutes()<toMin(cfg.dayStart)) x.setDate(x.getDate()-1);
+  return keyOfDate(x);
 }
+function dayDate(k){const [y,m,d]=k.split("-").map(Number);return new Date(y,m-1,d)}
+// Real start/end instants of the day containing `now`; their difference is 23, 24 or 25 hours.
+function dayBounds(now){
+  const k=dayKey(now), [y,m,d]=k.split("-").map(Number), ds=toMin(cfg.dayStart);
+  return {k,start:new Date(y,m-1,d,0,ds),end:new Date(y,m-1,d+1,0,ds)};
+}
+// Instant of wall-clock minute `min` (may exceed 1440) counted from midnight of now's date.
+const atWall=(now,min)=>new Date(now.getFullYear(),now.getMonth(),now.getDate(),0,min);
 function inRange(m,s,e){return s<=e ? (m>=s&&m<e) : (m>=s||m<e)}
 function blockAt(m){
   if(inRange(m,toMin(cfg.sleepS),toMin(cfg.sleepE))) return "sleep";
@@ -541,6 +588,12 @@ function blockAt(m){
 }
 const NAMES={sleep:"Унтах цаг",work:"Ажлын цаг",free:"Чөлөөт цаг"};
 
+// minutes since the current block began (1 = it began this minute)
+function prevChange(m){
+  const cur=blockAt(m);
+  for(let i=1;i<=1440;i++){if(blockAt(((m-i)%1440+1440)%1440)!==cur)return i}
+  return 1440;
+}
 function nextChange(m){
   const cur=blockAt(m);
   for(let i=1;i<=1440;i++){const b=blockAt((m+i)%1440);if(b!==cur)return{at:i,b}}
@@ -559,8 +612,151 @@ function drawGlass(elapsed){
   $("mound").setAttribute("rx",Math.min(46,10+hBot*.5));
   $("mound").setAttribute("ry",Math.min(7,1+hBot*.08));
   $("stream").setAttribute("y2",topY);
-  $("stream").style.opacity = rem>0.002 ? 1 : 0;
+  // the dashed SVG stream is the still picture; while grains are animating on the canvas they replace it
+  $("stream").style.opacity = rem>0.002&&!grainsOn ? 1 : 0;
+  G.topY=topY; G.hBot=hBot; G.rem=rem;
 }
+
+/* ---------- time you can see passing ----------
+   Everything is computed from the real clock (Date) on every frame; nothing is counted.
+   Battery: one requestAnimationFrame loop at ≈30 fps, only while the Day tab is on screen;
+   "reduce motion" turns it off and the ring then steps once a second from tick(). */
+const REDUCED=(()=>{try{return matchMedia("(prefers-reduced-motion: reduce)").matches}catch(e){return false}})();
+const G={topY:288,hBot:0,rem:1};
+let dayFrac=0, grainsOn=false, flipping=false;
+const RING_LEN=2*Math.PI*140;
+(function ringTicks(){
+  const g=$("ringTicks"); let h="";
+  for(let i=0;i<60;i+=5){const a=i/60*2*Math.PI, q=i%15===0, r1=q?126:129, r2=133;
+    h+=`<line class="${q?"q":""}" x1="${150+r1*Math.sin(a)}" y1="${150-r1*Math.cos(a)}" x2="${150+r2*Math.sin(a)}" y2="${150-r2*Math.cos(a)}"/>`}
+  g.innerHTML=h;
+})();
+function drawRing(now){
+  const f=(now.getSeconds()+now.getMilliseconds()/1000)/60, a=f*2*Math.PI;
+  $("ringArc").setAttribute("stroke-dashoffset",RING_LEN*(1-f));
+  $("ringDot").setAttribute("cx",150+140*Math.sin(a)); $("ringDot").setAttribute("cy",150-140*Math.cos(a));
+}
+// Clock HH:MM:SS; each digit rolls in when it changes.
+let clockEls=null, clockTxt="";
+function setClock(n){
+  const t=`${pad(n.getHours())}${pad(n.getMinutes())}${pad(n.getSeconds())}`;
+  if(!clockEls){
+    const c=$("clock"); c.textContent="";
+    const mk=()=>{const e=document.createElement("span");e.className="d";return e};
+    clockEls=[mk(),mk(),mk(),mk(),mk(),mk()];
+    const hm=document.createElement("span"); hm.append(clockEls[0],clockEls[1],":",clockEls[2],clockEls[3]);
+    const ss=document.createElement("span"); ss.className="ss"; ss.append(":",clockEls[4],clockEls[5]);
+    c.append(hm,ss);
+  }
+  for(let i=0;i<6;i++) if(t[i]!==clockTxt[i]){
+    const e=clockEls[i]; e.textContent=t[i];
+    if(clockTxt&&!REDUCED){e.classList.remove("roll"); void e.offsetWidth; e.classList.add("roll")}
+  }
+  clockTxt=t;
+  $("clock").setAttribute("aria-label",`Цаг ${n.getHours()}:${pad(n.getMinutes())}`);
+  if(REDUCED||!grainsOn) drawRing(n);
+}
+
+// Falling grains on a canvas laid exactly over the glass (glass units: 200 × 320).
+const cv=$("grains"), cx=cv.getContext&&cv.getContext("2d");
+let grains=[], piles=[], gRaf=0, gLast=0, gAcc=0;
+function sizeCanvas(){
+  const r=cv.getBoundingClientRect(), dpr=Math.min(2,window.devicePixelRatio||1);
+  if(!r.width) return false;
+  const w=Math.round(r.width*dpr), h=Math.round(r.height*dpr);
+  if(cv.width!==w||cv.height!==h){cv.width=w;cv.height=h}
+  return true;
+}
+function grainFrame(ts){
+  gRaf=0;
+  if(!grainsWanted()){stopGrains(); return}
+  gRaf=requestAnimationFrame(grainFrame);
+  const dt=gLast?Math.min(0.1,(ts-gLast)/1000):0;
+  if(gLast&&ts-gLast<30) return;                  // ≈30 fps is plenty and halves the battery cost
+  gLast=ts;
+  drawRing(new Date());
+  if(!cx||flipping||!sizeCanvas()) return;
+  const k=cv.width/200, flowing=G.rem>0.002;
+  // spawn: a thin, steady trickle from the neck
+  if(flowing){gAcc+=dt*55; while(gAcc>=1){gAcc--; grains.push({x:100+(Math.random()-.5)*1.6,y:162,vx:(Math.random()-.5)*4,vy:20+Math.random()*15,r:.7+Math.random()*.7,c:Math.random()})}}
+  const floor=G.topY-Math.min(6,1+G.hBot*.08)+1;
+  grains=grains.filter(g=>{
+    g.vy+=520*dt; g.x+=g.vx*dt; g.y+=g.vy*dt;
+    if(g.y>=floor-Math.abs(g.x-100)*0.12){         // lands on the mound: a few roll down its sides
+      if(Math.random()<.35) piles.push({x:g.x,y:floor-Math.abs(g.x-100)*0.12,vx:(Math.random()<.5?-1:1)*(8+Math.random()*14),life:1,r:g.r});
+      return false}
+    return g.y<300;
+  });
+  piles=piles.filter(p=>{p.x+=p.vx*dt; p.y+=Math.abs(p.vx)*dt*.18; p.vx*=.93; p.life-=dt*1.6; return p.life>0});
+  cx.setTransform(1,0,0,1,0,0); cx.clearRect(0,0,cv.width,cv.height); cx.setTransform(k,0,0,k,0,0);
+  if(flowing){                                   // faint glow of the falling column
+    const gr=cx.createLinearGradient(0,160,0,G.topY); gr.addColorStop(0,"rgba(243,217,166,.35)"); gr.addColorStop(1,"rgba(243,217,166,.05)");
+    cx.fillStyle=gr; cx.fillRect(99.4,160,1.2,Math.max(0,G.topY-160));
+  }
+  for(const g of grains){cx.fillStyle=g.c<.5?"#f3d9a6":"#e3b26b"; cx.beginPath(); cx.arc(g.x,g.y,g.r,0,6.283); cx.fill()}
+  for(const p of piles){cx.globalAlpha=Math.max(0,p.life); cx.fillStyle="#d9a65e"; cx.beginPath(); cx.arc(p.x,p.y,p.r,0,6.283); cx.fill()}
+  cx.globalAlpha=1;
+  // the mound shifts a little as grains land on it
+  if(flowing&&G.hBot>0){const t=ts/1000, m=$("mound");
+    m.setAttribute("cx",100+Math.sin(t*1.7)*.9+Math.sin(t*4.3)*.4);
+    m.setAttribute("ry",Math.min(7,1+G.hBot*.08)+Math.sin(t*2.9)*.35)}
+}
+const grainsWanted=()=>!REDUCED&&document.visibilityState==="visible"&&$("v-day").classList.contains("on");
+function startGrains(){
+  if(gRaf||!grainsWanted()) return;
+  grainsOn=true; gLast=0; drawGlass(dayFrac); gRaf=requestAnimationFrame(grainFrame);
+}
+function stopGrains(){
+  if(gRaf) cancelAnimationFrame(gRaf); gRaf=0; grainsOn=false; grains=[]; piles=[];
+  if(cx){cx.setTransform(1,0,0,1,0,0); cx.clearRect(0,0,cv.width,cv.height)}
+  drawGlass(dayFrac);
+}
+document.addEventListener("visibilitychange",()=>{grainsWanted()?startGrains():stopGrains(); sandSoundSync()});
+
+// A new day: the hourglass turns over (bottom full → becomes the full top).
+function flipGlass(){
+  if(REDUCED||flipping) return;
+  const w=$("gwrap"); flipping=true; drawGlass(1);
+  if(cx){cx.setTransform(1,0,0,1,0,0); cx.clearRect(0,0,cv.width,cv.height)} grains=[]; piles=[];
+  w.classList.remove("flip"); void w.offsetWidth; w.classList.add("flip");
+  const done=()=>{w.classList.remove("flip"); flipping=false; drawGlass(dayFrac)};
+  w.addEventListener("animationend",done,{once:true});
+  setTimeout(()=>{if(flipping)done()},2500);       // if animationend never comes (tab hidden)
+}
+
+// Optional quiet sand sound: looping filtered noise made of tiny random grains. Off by default.
+let sandSrc=null, sandGain=null;
+function sandBuffer(ctx){
+  const len=ctx.sampleRate*3, b=ctx.createBuffer(1,len,ctx.sampleRate), d=b.getChannelData(0);
+  let env=0;
+  for(let i=0;i<len;i++){
+    if(Math.random()<.004) env=.3+Math.random()*.7;   // a grain hits
+    env*=.993; d[i]=(Math.random()*2-1)*(.18+env);
+  }
+  // fade the loop seam
+  for(let i=0;i<2000;i++){const f=i/2000; d[i]*=f; d[len-1-i]*=f}
+  return b;
+}
+function sandSoundSync(){
+  const want=cfg.sandSound&&document.visibilityState==="visible"&&$("v-day").classList.contains("on");
+  if(want&&!sandSrc){
+    unlockAudio(); if(!actx) return;
+    if(actx.state!=="running"){ actx.resume().then(()=>{if(actx.state==="running")sandSoundSync()}).catch(()=>{}); return }  // needs a tap first
+    try{
+      const bp=actx.createBiquadFilter(); bp.type="bandpass"; bp.frequency.value=3200; bp.Q.value=.6;
+      const lp=actx.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=7000;
+      sandGain=actx.createGain(); sandGain.gain.value=0;
+      sandSrc=actx.createBufferSource(); sandSrc.buffer=sandBuffer(actx); sandSrc.loop=true;
+      sandSrc.connect(bp).connect(lp).connect(sandGain).connect(actx.destination); sandSrc.start();
+      sandGain.gain.setTargetAtTime(.05,actx.currentTime,.6);
+    }catch(e){sandSrc=null}
+  } else if(!want&&sandSrc){
+    const src=sandSrc, g=sandGain; sandSrc=null; sandGain=null;
+    try{g.gain.setTargetAtTime(0,actx.currentTime,.15); setTimeout(()=>{try{src.stop()}catch(e){}},700)}catch(e){}
+  }
+}
+// browsers allow sound only after a tap: try again on the first one
+addEventListener("pointerdown",()=>{if(cfg.sandSound&&!sandSrc){unlockAudio(); setTimeout(sandSoundSync,50)}},{passive:true});
 
 /* ---------- timeline bar ---------- */
 function drawBar(){
@@ -752,7 +948,7 @@ document.addEventListener("focusin",e=>{if(KB_INPUT(e.target))document.body.clas
 document.addEventListener("focusout",()=>setTimeout(()=>{if(!KB_INPUT(document.activeElement))document.body.classList.remove("typing")},50));
 function renderWeek(){
   const w=$("week"); w.innerHTML="";
-  const now=new Date(), base=new Date(now.getTime()-toMin(cfg.dayStart)*60000);
+  const base=dayDate(dayKey(new Date()));
   for(let i=6;i>=0;i--){
     const d=new Date(base);d.setDate(base.getDate()-i);
     const k=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
@@ -782,26 +978,34 @@ function tick(){
   if(typeof checkReminders==="function") checkReminders();
   const n=new Date();
   const m=n.getHours()*60+n.getMinutes()+n.getSeconds()/60;
-  const ds=toMin(cfg.dayStart);
-  const since=((m-ds)%1440+1440)%1440;
-  const elapsed=since/1440;
-  drawGlass(elapsed);
-  $("clock").textContent=`${pad(n.getHours())}:${pad(n.getMinutes())}`;
-  const remSec=Math.round((1440-since)*60);
+  const {start,end}=dayBounds(n);
+  const elapsed=Math.min(1,Math.max(0,(n-start)/(end-start)));   // real time, so 23 h / 25 h days are right
+  dayFrac=elapsed;
+  if(!flipping) drawGlass(elapsed);
+  setClock(n);
+  const remSec=Math.max(0,Math.round((end-n)/1000));
   const rh=Math.floor(remSec/3600), rm=Math.floor(remSec%3600/60), rs=remSec%60;
   $("left").innerHTML=`Өдөр дуусахад <b>${pad(rh)}:${pad(rm)}:${pad(rs)}</b> · ${Math.round(elapsed*100)}% урссан`;
   const mk=$("marker"); if(mk) mk.style.left=`calc(${elapsed*100}% - 1px)`;
 
   const cur=blockAt(Math.floor(m)), nx=nextChange(Math.floor(m));
   $("nowBlock").textContent=NAMES[cur];
-  $("nowSub").textContent=nx?`${fmtDur(nx.at)} үлдсэн`:"";
+  $("nowBlock").dataset.b=cur;
+  if(nx){
+    // real instants of this block's start and end (wall clock → Date handles daylight saving)
+    const bEnd=atWall(n,Math.floor(m)+nx.at), pv=prevChange(Math.floor(m)), bStart=atWall(n,Math.floor(m)-pv+1);
+    const left=Math.max(0,bEnd-n), tot=Math.max(1,bEnd-bStart);
+    $("nowSub").textContent=`${fmtDur(Math.ceil(left/60000))} үлдсэн`;
+    $("nowProg").style.width=Math.min(100,(n-bStart)/tot*100)+"%";
+    $("nowProg").parentNode.hidden=false;
+  } else { $("nowSub").textContent=""; $("nowProg").parentNode.hidden=true; }
   $("nextBlock").textContent=nx?NAMES[nx.b]:"—";
   if(nx){const t=(Math.floor(m)+nx.at)%1440;$("nextSub").textContent=`${pad(Math.floor(t/60))}:${pad(t%60)}-д`}
 
   $("date").textContent=`${n.getFullYear()} оны ${MONTHS[n.getMonth()]}ын ${n.getDate()}, ${WD[n.getDay()]}`;
   const k=dayKey(n);
   if(k!==lastKey){ // new day: hourglass flips, list resets
-    lastKey=k; renderTasks(); renderWeek();
+    lastKey=k; renderTasks(); renderWeek(); flipGlass(); store.set("elsen_seen",k);
     if($("v-stat").classList.contains("on")&&typeof renderStats==="function"){statY=null; statSel=null; renderStats()}
   }
 }
@@ -811,6 +1015,7 @@ let draft=[];
 function openSettings(){
   ["dayStart","sleepS","sleepE","workS","workE"].forEach(id=>$(id).value=cfg[id]);
   $("soundOn").checked=cfg.sound!==false;
+  $("sandOn").checked=cfg.sandSound;
   draft=cfg.tasks.map(t=>({...t})); renderEdit();
   if(!$("sheet").classList.contains("on")){
     sheetY=window.scrollY; document.body.style.top=-sheetY+"px";
@@ -863,8 +1068,9 @@ $("save").onclick=()=>{
   ["dayStart","sleepS","sleepE","workS","workE"].forEach(id=>{if($(id).value)cfg[id]=$(id).value});
   cfg.tasks=draft.filter(t=>t.name.trim()).map(t=>({id:t.id,name:t.name.trim(),min:t.min||0,rem:t.rem||""}));
   cfg.sound=$("soundOn").checked;
+  cfg.sandSound=$("sandOn").checked; if(cfg.sandSound) unlockAudio();
   store.set("elsen_cfg",cfg); lastRemCheck=-1; lastKey=dayKey(new Date());
-  closeSettings(); drawBar(); renderTasks(); renderWeek(); tick();
+  closeSettings(); drawBar(); renderTasks(); renderWeek(); tick(); sandSoundSync();
   toast("Хадгаллаа ✓");
 };
 
@@ -897,6 +1103,7 @@ function showView(v){
   try{sessionStorage.setItem("elsen_view",v)}catch(e){}
   window.scrollTo(0,0);
   if(v==="v-sw") swRender();
+  if(typeof startGrains==="function"){ v==="v-day"?startGrains():stopGrains(); sandSoundSync() }
   if(v==="v-stat" && typeof renderStats==="function") renderStats();
 }
 document.querySelectorAll("nav.tabs button").forEach(b=>b.onclick=()=>goView(b.dataset.v));
@@ -1159,6 +1366,7 @@ let pantry=store.get("elsen_pantry",[]);
 if(!Array.isArray(pantry)) pantry=[]; pantry=pantry.filter(x=>typeof x==="string");
 let foodCfg=Object.assign({goal:"Эрүүл хооллолт",ppl:"1",shift:"Өглөөний ээлж",note:""},store.get("elsen_foodcfg",{}));
 let plan=store.get("elsen_plan",null), planDay=0;
+const todayPlanDay=()=>(dayDate(dayKey(new Date())).getDay()+6)%7;   // plan runs Monday..Sunday
 
 function renderPantry(){
   const p=$("pantry"); p.innerHTML="";
@@ -1308,7 +1516,7 @@ $("gen").onclick=async()=>{
     }
   }
   if(!p) p=fallbackPlan(o);
-  plan={...p,src,at:Date.now()}; planDay=0;
+  plan={...p,src,at:Date.now()}; planDay=todayPlanDay();
   store.set("elsen_plan",plan); btn.disabled=false; renderPlan();
 };
 function renderPlan(){
@@ -1342,16 +1550,25 @@ function renderPlan(){
   }
 }
 if(plan){const p=normalizePlan(plan); plan=p?{...p,src:plan.src==="claude"?"claude":"local",at:+plan.at||Date.now()}:null}
+if(plan&&plan.days[todayPlanDay()]) planDay=todayPlanDay();
 renderPantry(); renderPlan();
 
 /* ---------- toast ---------- */
 let toastT=0;
+let toastIsUpdate=false;
+// A pending "new version" offer comes back after any other message has gone, unless the person dismissed it.
+function hideToast(dismissed){
+  $("toast").classList.remove("on"); clearTimeout(toastT);
+  if(toastIsUpdate){ if(dismissed) pendingUpdate=null; return }
+  if(pendingUpdate) setTimeout(()=>{if(pendingUpdate&&!$("toast").classList.contains("on")) pendingUpdate()},400);
+}
 function toast(msg,btn,fn,ms){
+  toastIsUpdate=false;
   $("toastMsg").textContent=msg;
-  const b=$("toastBtn"); b.hidden=!btn; b.textContent=btn||""; b.onclick=()=>{$("toast").classList.remove("on"); fn&&fn()};
-  const x=$("toastX"); x.hidden=!btn; x.onclick=()=>{$("toast").classList.remove("on"); clearTimeout(toastT)};
+  const b=$("toastBtn"); b.hidden=!btn; b.textContent=btn||""; b.onclick=()=>{hideToast(false); fn&&fn()};
+  const x=$("toastX"); x.hidden=!btn; x.onclick=()=>hideToast(true);
   $("toast").classList.add("on"); clearTimeout(toastT);
-  if(ms!==0) toastT=setTimeout(()=>$("toast").classList.remove("on"),ms||4500);
+  if(ms!==0) toastT=setTimeout(()=>hideToast(false),ms||4500);
 }
 
 /* ---------- PWA: offline + install ---------- */
@@ -1442,12 +1659,14 @@ try{
 // Ask the browser not to clear this app's storage when the phone runs low on space.
 try{if(isStandalone()&&navigator.storage&&navigator.storage.persist) navigator.storage.persisted().then(p=>{if(!p)navigator.storage.persist()})}catch(e){}
 
-let swReg=null, updating=false;
+let swReg=null, updating=false, pendingUpdate=null;
 if("serviceWorker" in navigator && /^https?:$/.test(location.protocol)){
   addEventListener("load",async()=>{
     try{
       swReg=await navigator.serviceWorker.register("sw.js");
-      const offerUpdate=w=>toast("Шинэ хувилбар бэлэн боллоо","Шинэчлэх",()=>{updating=true;w.postMessage("SKIP_WAITING")},0);
+      const offerUpdate=w=>{pendingUpdate=()=>offerUpdate(w); toast("Шинэ хувилбар бэлэн боллоо","Шинэчлэх",()=>{pendingUpdate=null;updating=true;w.postMessage("SKIP_WAITING")},0); toastIsUpdate=true};
+      // an installed app can stay open for days: look for a new version whenever it comes back to the screen
+      document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")swReg.update().catch(()=>{})});
       if(swReg.waiting&&navigator.serviceWorker.controller) offerUpdate(swReg.waiting);
       swReg.addEventListener("updatefound",()=>{const w=swReg.installing;
         w&&w.addEventListener("statechange",()=>{if(w.state==="installed"&&navigator.serviceWorker.controller)offerUpdate(w)})});
@@ -1468,7 +1687,7 @@ if("serviceWorker" in navigator && /^https?:$/.test(location.protocol)){
 })();
 
 // Respect "reduce motion": stop the falling-sand stream animation.
-try{if(matchMedia("(prefers-reduced-motion: reduce)").matches)document.querySelector("svg.glass").pauseAnimations()}catch(e){}
+try{if(REDUCED)document.querySelector("svg.glass").pauseAnimations()}catch(e){}
 
 let startView="v-day"; try{startView=sessionStorage.getItem("elsen_view")||"v-day"}catch(e){}
 // Home-screen shortcuts open a tab directly: ./?v=v-sw, ./?v=v-stat
@@ -1476,7 +1695,8 @@ try{const q=new URLSearchParams(location.search).get("v"); if(q&&$(q)&&$(q).clas
 
 drawBar(); renderTasks(); renderWeek(); tick();
 // Tick right after each whole second so the clock and countdowns change in step with real time.
-(function loop(){setTimeout(()=>{tick(); loop()},1000-Date.now()%1000+15)})();
+// try/finally: one error inside tick() must never stop the clock.
+(function loop(){setTimeout(()=>{try{tick()}catch(e){console.warn(e)}finally{loop()}},1000-Date.now()%1000+15)})();
 // Restore the tab after a reload / open a shortcut, keeping Day underneath it for the back button.
 try{
   const st=history.state||{};
@@ -1485,6 +1705,8 @@ try{
   if(useHist&&startView==="v-day"&&st.view) history.replaceState(null,"");
 }catch(e){}
 showView(startView);
+// First time the app is opened on a new day: turn the hourglass over once.
+if(store.get("elsen_seen",null)!==lastKey){ if(store.get("elsen_seen",null)) setTimeout(flipGlass,400); store.set("elsen_seen",lastKey) }
 </script>
 </body>
 </html>
