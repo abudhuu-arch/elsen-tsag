@@ -107,6 +107,13 @@ h2{font-family:"Cormorant Garamond",serif;font-size:24px;font-weight:600;color:v
 .task.done .t{color:var(--mute);text-decoration:line-through;text-decoration-color:var(--dim)}
 .task .tm{font-size:11px;color:var(--dim)}
 .task .tx{flex:1;min-width:0}
+.task .st{font-size:12px;color:var(--mute);margin-top:3px}
+.task.off{opacity:.55}
+.task.off .box{border-style:dashed}
+.fq{display:flex;align-items:center;gap:6px;flex-wrap:wrap;width:100%}
+.fq select{background:var(--bg2);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:7px 8px;font:inherit;font-size:14px;color-scheme:dark}
+.fq .wdb{width:34px;height:32px;border-radius:9px;border:1px solid var(--line);background:var(--bg2);color:var(--mute);font:inherit;font-size:12px;cursor:pointer}
+.fq .wdb.on{background:var(--sand);border-color:var(--sand);color:#2a1d0c}
 .tp{height:3px;background:var(--bg2);border-radius:2px;overflow:hidden;margin-top:7px}
 .tp i{display:block;height:100%;background:var(--sand);border-radius:2px;transition:width .9s linear}
 .tbtn{flex:none;min-width:74px;background:var(--bg2);border:1px solid var(--line);color:var(--sand);border-radius:10px;padding:8px 10px;font:inherit;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;cursor:pointer}
@@ -668,6 +675,13 @@ let hist = store.get("elsen_hist",{}); // {dayKey:{taskId:"HH:MM"}}  (unchanged 
 // Saved data can come from an old version or a hand-edited backup: keep what is valid, repair the rest.
 const isHM=s=>typeof s==="string"&&/^([01]\d|2[0-3]):[0-5]\d$/.test(s);
 const isObj=o=>!!o&&typeof o==="object"&&!Array.isArray(o);
+const isKey=s=>typeof s==="string"&&/^\d{4}-\d\d-\d\d$/.test(s);
+// How often a habit is due: every day, N times a week, or on chosen weekdays (0 = Sunday). Anything else → every day.
+function normFreq(f){
+  if(isObj(f)&&f.t==="week"){const n=Math.round(+f.n); if(n>=1&&n<=6) return {t:"week",n}}
+  if(isObj(f)&&f.t==="days"&&Array.isArray(f.d)){const d=[...new Set(f.d.map(Number).filter(x=>Number.isInteger(x)&&x>=0&&x<=6))].sort((a,b)=>a-b); if(d.length&&d.length<7) return {t:"days",d}}
+  return {t:"daily"};
+}
 ["dayStart","sleepS","sleepE","workS","workE"].forEach(k=>{if(!isHM(cfg[k]))cfg[k]=DEFAULT[k]});
 if(!Array.isArray(cfg.tasks)) cfg.tasks=DEFAULT.tasks;
 cfg.sandSound=cfg.sandSound===true;          // off unless turned on
@@ -686,7 +700,8 @@ cfg.tasks=cfg.tasks.filter(t=>isObj(t)&&t.id!=null&&typeof t.name==="string").ma
   const m=/(\d+)\s*(минут|мин)/i.exec(t.name);
   const min=typeof t.min==="number"&&isFinite(t.min)?Math.max(0,Math.min(600,Math.round(t.min))):(m?Math.min(600,+m[1]):0);
   // ...t first: fields this version doesn't know (from a newer version or a backup) are kept, never dropped
-  return {...t,id:String(t.id),name:t.name,min,rem:isHM(t.rem)?t.rem:"",unit:typeof t.unit==="string"?t.unit.trim().slice(0,12):"",link:t.link==="water"?"water":""};
+  return {...t,id:String(t.id),name:t.name,min,rem:isHM(t.rem)?t.rem:"",unit:typeof t.unit==="string"?t.unit.trim().slice(0,12):"",link:t.link==="water"?"water":"",
+    freq:normFreq(t.freq),...(isKey(t.start)?{start:t.start}:{})};
 });
 // Habits removed in Settings are kept here (with their history), so stats and old days still know them.
 cfg.archive=Array.isArray(cfg.archive)?cfg.archive.filter(t=>isObj(t)&&t.id!=null&&typeof t.name==="string").map(t=>({...t,id:String(t.id)})):[];
@@ -980,15 +995,16 @@ function celebrate(){
 function todayDone(){const k=dayKey(new Date());return hist[k]||(hist[k]={})}
 function renderTasks(){
   const k=dayKey(new Date()), done=todayDone(), box=$("tasks"); box.innerHTML="";
-  const ids=cfg.tasks.map(t=>t.id);
+  const ids=cfg.tasks.filter(t=>countsOn(t,k)).map(t=>t.id);       // today's score: habits due today (+ extras done)
   if((snap[k]||[]).join()!==ids.join()){snap[k]=ids; store.set("elsen_snap",snap)}
   cfg.tasks.forEach(t=>{
     const el=document.createElement("div");
-    el.className="task"+(done[t.id]?" done":""); el.dataset.id=t.id;
+    el.className="task"+(done[t.id]?" done":"")+(isDue(t,k)?"":" off"); el.dataset.id=t.id;
     el.tabIndex=0; el.setAttribute("role","checkbox"); el.setAttribute("aria-checked",done[t.id]?"true":"false");
     el.onkeydown=e=>{if(e.target===el&&(e.key===" "||e.key==="Enter")){e.preventDefault();el.click()}};
-    el.innerHTML=`<div class="box"></div><div class="tx"><div class="t"></div><div class="tp" hidden><i></i></div></div><div class="tm"></div>`;
+    el.innerHTML=`<div class="box"></div><div class="tx"><div class="t"></div><div class="st"></div><div class="tp" hidden><i></i></div></div><div class="tm"></div>`;
     el.querySelector(".t").textContent=t.name;
+    const st=habitLine(t,k); el.querySelector(".st").textContent=st; el.querySelector(".st").hidden=!st;
     const wl=t.link==="water"&&cfg.waterGoal>0;
     if(wl){ el.classList.add("wlink"); el.querySelector(".tp").hidden=false;
       const n=water[k]||0; el.querySelector(".tp i").style.width=Math.min(100,n/cfg.waterGoal*100)+"%";
@@ -1012,7 +1028,7 @@ function renderTasks(){
     };
     box.appendChild(el);
   });
-  const c=cfg.tasks.filter(t=>done[t.id]).length, tot=cfg.tasks.length;
+  const c=ids.filter(id=>done[id]).length, tot=ids.length;
   $("cnt").textContent=c; $("tot").textContent=tot;
   $("prog").style.width=(tot?c/tot*100:0)+"%";
   $("alldone").classList.toggle("on", tot>0 && c===tot);
@@ -1158,8 +1174,59 @@ $("wMinus").onclick=()=>setWater((water[dayKey(new Date())]||0)-1);
 
 // A day is scored against the tasks it had (snapshot); days before snapshots existed use today's list.
 // Which habits a day had: what was saved that day, or (a day the app wasn't opened) today's list plus habits archived later.
-function idsOn(k){return snap[k]||[...cfg.tasks,...cfg.archive.filter(a=>a.archived&&a.archived>k)].map(t=>t.id)}
+function idsOn(k){return snap[k]||[...cfg.tasks,...cfg.archive.filter(a=>a.archived&&a.archived>k)].filter(t=>countsOn(t,k)).map(t=>t.id)}
 function scoreFor(k){const ids=idsOn(k), d=hist[k]||{};return{c:ids.filter(id=>d[id]).length,tot:ids.length}}
+
+/* ---------- habits: frequency and streaks ---------- */
+// Habits from before frequencies existed have no start date: they count from the first day the app was used.
+const startOf=t=>t.start||firstUseKey();
+const doneOn=(t,k)=>!!(hist[k]||{})[t.id];
+// A fixed day: every day, or one of the chosen weekdays. "N a week" habits have no fixed days.
+function fixedDue(t,k){
+  if(k<startOf(t)) return false;
+  const f=t.freq||{t:"daily"};
+  return f.t==="daily"||(f.t==="days"&&f.d.includes(dayDate(k).getDay()));
+}
+function weekDone(t,k){let c=0; for(let x=mondayOf(k);x<=addDays(mondayOf(k),6);x=addDays(x,1)) if(doneOn(t,x)) c++; return c}
+// Still to do today? Fixed day, or an "N a week" habit whose week isn't complete yet (done today counts too).
+function isDue(t,k){
+  if(k<startOf(t)) return false;
+  if((t.freq||{}).t==="week") return doneOn(t,k)||weekDone(t,k)<t.freq.n;
+  return fixedDue(t,k);
+}
+// In the day's score: its fixed days, plus any day it was done (an extra day, or an "N a week" habit).
+const countsOn=(t,k)=>fixedDue(t,k)||(k>=startOf(t)&&doneOn(t,k));
+// Days in a row (for "N a week": times done in a row of complete weeks). Days that aren't due never break it;
+// today doesn't break it before the day is over.
+function streakOf(t,today){
+  const st=startOf(t); let s=0;
+  if((t.freq||{}).t==="week"){
+    for(let mon=mondayOf(today),first=true;mon>=mondayOf(st);mon=addDays(mon,-7),first=false){
+      let c=0,avail=0;
+      for(let i=0;i<7;i++){const k=addDays(mon,i); if(k>today||k<st) continue; avail++; if(doneOn(t,k)) c++}
+      if(first||c>=Math.min(t.freq.n,avail)) s+=c; else break;
+    }
+    return s;
+  }
+  for(let k=today;k>=st;k=addDays(k,-1)){
+    if(doneOn(t,k)){s++; continue}
+    if(k===today||!fixedDue(t,k)) continue;
+    break;
+  }
+  return s;
+}
+// Mongolian ordinal: 1 дэх, 2 дахь, 4 дэх, 9 дэх, 40 дэх, 12 дахь…
+function ordSuf(n){const u=n%10, d=Math.floor(n/10)%10; const w=u||d; return (w===1&&u)||w===4||w===9?"дэх":"дахь"}
+const WD_MON=["Да","Мя","Лх","Пү","Ба","Бя","Ня"];          // Monday first
+const freqText=f=>!f||f.t==="daily"?"Өдөр бүр":f.t==="week"?`7 хоногт ${f.n} удаа`:[1,2,3,4,5,6,0].filter(x=>f.d.includes(x)).map(x=>WD_MON[(x+6)%7]).join("·");
+// The line under a habit's name: streak, and how often it is due.
+function habitLine(t,k){
+  const s=streakOf(t,k), wk=(t.freq||{}).t==="week", p=[];
+  if(s>0) p.push(doneOn(t,k)?`🔥 ${s} ${ordSuf(s)} ${wk?"удаа":"өдөр"}`:`🔥 ${s} ${wk?"удаа":"өдөр"} дараалан`);
+  if(wk) p.push(`7 хоногт ${weekDone(t,k)}/${t.freq.n}`);
+  else if((t.freq||{}).t==="days") p.push(fixedDue(t,k)?freqText(t.freq):`Өнөөдөр биш · ${freqText(t.freq)}`);
+  return p.join(" · ");
+}
 
 /* ---------- task timers ---------- */
 const saveTm=()=>store.set("elsen_tm",tm);
@@ -1298,7 +1365,7 @@ function renderWeek(){
     const d=new Date(base);d.setDate(base.getDate()-i);
     const k=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
     const {c,tot}=scoreFor(k);
-    if(tot&&c===tot) s++; else if(i===0) continue; else break;
+    if(tot&&c===tot) s++; else if(i===0) continue; else if(!tot&&k>=firstUseKey()) continue; else break;
   }
   $("streak").innerHTML = s ? `Тасралтгүй <b>${s}</b> өдөр бүгдийг биелүүлсэн` : `Өнөөдрөөс эхлээд дараалал үүсгээрэй`;
 }
@@ -1398,6 +1465,7 @@ function renderEdit(){
     wc.onchange=()=>{draft.forEach(x=>{if(x!==t&&wc.checked)x.link=""}); t.link=wc.checked?"water":""; renderEdit()};
     if(typeof remEditor==="function") o.appendChild(remEditor(t));
     o.appendChild(lw);
+    o.appendChild(freqEditor(t));
     const mv=document.createElement("div"); mv.className="mv";
     [["↑",-1,"Дээш"],["↓",1,"Доош"]].forEach(([s,d,lab])=>{
       const x=document.createElement("button"); x.textContent=s; x.setAttribute("aria-label",lab+": "+(t.name||"зүйл"));
@@ -1409,16 +1477,37 @@ function renderEdit(){
     wrap.append(r,o); l.appendChild(wrap);
   });
 }
+// How often: every day / N times a week / chosen weekdays
+function freqEditor(t){
+  const w=document.createElement("div"); w.className="fq";
+  const f=t.freq=normFreq(t.freq);
+  w.innerHTML=`<span>🔁</span><select aria-label="Давтамж: ${(t.name||"зүйл").replace(/[<>&"]/g,"")}"><option value="daily">Өдөр бүр</option><option value="week">7 хоногт N удаа</option><option value="days">Гарагаар</option></select>`;
+  const sel=w.querySelector("select"); sel.value=f.t;
+  sel.onchange=()=>{t.freq=sel.value==="week"?{t:"week",n:3}:sel.value==="days"?{t:"days",d:[1,3,5]}:{t:"daily"}; w.replaceWith(freqEditor(t))};
+  if(f.t==="week"){
+    const n=document.createElement("input"); n.type="number"; n.min="1"; n.max="6"; n.inputMode="numeric"; n.value=f.n; n.setAttribute("aria-label","7 хоногт хэдэн удаа");
+    n.oninput=()=>{const v=Math.round(+n.value); if(v>=1&&v<=6) t.freq={t:"week",n:v}};
+    const u=document.createElement("span"); u.textContent="удаа"; w.append(n,u);
+  }
+  if(f.t==="days") [1,2,3,4,5,6,0].forEach(d=>{
+    const b=document.createElement("button"); b.type="button"; b.className="wdb"+(f.d.includes(d)?" on":""); b.textContent=WD_MON[(d+6)%7];
+    b.setAttribute("aria-pressed",f.d.includes(d)?"true":"false"); b.setAttribute("aria-label",WD_FULL[d]);
+    b.onclick=()=>{const has=t.freq.d.includes(d), nd=has?t.freq.d.filter(x=>x!==d):[...t.freq.d,d];
+      if(!nd.length||nd.length===7) return;                     // at least one day; all seven = every day (pick that above)
+      t.freq={t:"days",d:nd.sort((a,b)=>a-b)}; b.classList.toggle("on",!has); b.setAttribute("aria-pressed",String(!has))};
+    w.appendChild(b)});
+  return w;
+}
 $("openSet").onclick=openSettings;
 $("close").onclick=closeSettings;
 $("sheet").onclick=e=>{if(e.target.id==="sheet")closeSettings()};
-$("addTask").onclick=()=>{draft.push({id:"t"+Date.now(),name:"",min:0,rem:"",unit:"",link:""});renderEdit();const ins=$("editList").querySelectorAll("input.nm");ins[ins.length-1].focus()};
+$("addTask").onclick=()=>{draft.push({id:"t"+Date.now(),name:"",min:0,rem:"",unit:"",link:"",freq:{t:"daily"},start:dayKey(new Date())});renderEdit();const ins=$("editList").querySelectorAll("input.nm");ins[ins.length-1].focus()};
 $("save").onclick=()=>{
   ["dayStart","sleepS","sleepE","workS","workE"].forEach(id=>{if($(id).value)cfg[id]=$(id).value});
   shDraft.list=shDraft.list.filter(x=>x.name.trim()).map(x=>({...x,name:x.name.trim()}));
   shDraft.on=shDraft.on&&shDraft.list.length>0; shDraft.cur=Math.min(shDraft.cur,Math.max(0,shDraft.list.length-1));
   cfg.shifts=shDraft;
-  const kept=draft.filter(t=>t.name.trim()).map(t=>({...t,id:t.id,name:t.name.trim(),min:t.min||0,rem:t.rem||"",unit:(t.unit||"").trim().slice(0,12),link:t.link==="water"?"water":""}));
+  const kept=draft.filter(t=>t.name.trim()).map(t=>({...t,id:t.id,name:t.name.trim(),min:t.min||0,rem:t.rem||"",unit:(t.unit||"").trim().slice(0,12),link:t.link==="water"?"water":"",freq:normFreq(t.freq)}));
   // a removed habit goes to the archive with its history; it is never erased
   cfg.tasks.filter(t=>!kept.some(x=>x.id===t.id)).forEach(t=>cfg.archive.push({...t,archived:dayKey(new Date())}));
   cfg.tasks=kept;
@@ -1588,7 +1677,7 @@ function remEditor(t){
   sync(); l.append(i,x); return l;
 }
 function reminderLabel(t,done,el){
-  if(!t.rem||done[t.id]) return;
+  if(!t.rem||done[t.id]||!isDue(t,dayKey(new Date()))) return;
   el.textContent=`⏰ ${t.rem}`;
   if(nowSince()>=sinceStart(toMin(t.rem))) el.classList.add("late");
 }
@@ -1599,7 +1688,7 @@ function checkReminders(){
   if(!notified[k]) notified={[k]:{}};                 // keep only today's record
   const sent=notified[k], due=[], missed=[];
   cfg.tasks.forEach(t=>{
-    if(!t.rem||done[t.id]||sent[t.id]) return;
+    if(!t.rem||done[t.id]||sent[t.id]||!isDue(t,k)) return;
     const rs=sinceStart(toMin(t.rem)); if(ns<rs) return;
     sent[t.id]=1; (ns-rs<=15?due:missed).push(t);     // >15 min late = app was closed: just mark it
   });

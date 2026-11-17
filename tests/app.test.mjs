@@ -67,7 +67,7 @@ test('old saved data migrates without losing history', async t => {
   const hist = { [keyAgo(3)]: { t1: '08:00', t5: '21:00' } };
   const { page } = await open(t, `()=>{localStorage.elsen_cfg=${JSON.stringify(JSON.stringify({ dayStart: '00:00', sleepS: '23:00', sleepE: '07:00', workS: '09:00', workE: '18:00', tasks: [{ id: 't1', name: 'Гадаад хэл' }, { id: 't5', name: 'Ном унших 30 минут' }] }))};localStorage.elsen_hist=${JSON.stringify(JSON.stringify(hist))}}`);
   const tasks = await page.evaluate(() => cfg.tasks);
-  assert.deepEqual(tasks, [{ id: 't1', name: 'Гадаад хэл', min: 0, rem: '', unit: '', link: '' }, { id: 't5', name: 'Ном унших 30 минут', min: 30, rem: '', unit: '', link: '' }]);
+  assert.deepEqual(tasks, [{ id: 't1', name: 'Гадаад хэл', min: 0, rem: '', unit: '', link: '', freq: { t: 'daily' } }, { id: 't5', name: 'Ном унших 30 минут', min: 30, rem: '', unit: '', link: '', freq: { t: 'daily' } }]);
   assert.deepEqual(JSON.parse(await page.evaluate(() => localStorage.elsen_hist)), hist);
   assert.deepEqual(await page.$$eval('.tbtn', b => b.map(x => x.textContent)), ['▶ 30м']);
 });
@@ -82,7 +82,7 @@ test('corrupted or hand-edited data does not break the app', async t => {
   const { page } = await open(t, `()=>{const b=${JSON.stringify(bad)};for(const k in b)localStorage.setItem(k,JSON.stringify(b[k]))}`);
   const c = await page.evaluate(() => cfg);
   assert.equal(c.dayStart, '00:00'); assert.equal(c.sleepS, '23:00');
-  assert.deepEqual(c.tasks, [{ id: 't1', name: 'Ном 20 мин', min: 20, rem: '', unit: '', link: '' }, { id: '7', name: 'Гүйх', min: 600, rem: '', unit: '', link: '' }]);
+  assert.deepEqual(c.tasks, [{ id: 't1', name: 'Ном 20 мин', min: 20, rem: '', unit: '', link: '', freq: { t: 'daily' } }, { id: '7', name: 'Гүйх', min: 600, rem: '', unit: '', link: '', freq: { t: 'daily' } }]);
   assert.match(await page.textContent('#clock'), /^\d\d:\d\d:\d\d$/);
   for (const v of ['v-sw', 'v-food', 'v-stat']) await page.click(`nav.tabs button[data-v="${v}"]`);
 });
@@ -508,4 +508,50 @@ test('data safety: a full copy is kept before the format upgrade; unknown fields
     await page.click('nav.tabs button[data-v="v-stat"]');
     assert.match(await page.textContent('#perTask'), /Ном унших 30 минут · архив/);
   }
+});
+
+test('habits: own streak per habit, frequency (daily / N a week / weekdays), days off never break a streak', async t => {
+  // Wednesday 2026-11-18, noon. Read: every day. Run: Mon/Wed/Fri. Swim: 2 a week. Journal: every day, missed Monday.
+  const K = d => `2026-${d}`;
+  const cfg = { dayStart: '00:00', sleepS: '23:00', sleepE: '07:00', workS: '09:00', workE: '18:00', v: 2, tasks: [
+    { id: 'r', name: 'Ном унших', start: K('10-01') },
+    { id: 'g', name: 'Гүйх', freq: { t: 'days', d: [1, 3, 5] }, start: K('10-01') },
+    { id: 's', name: 'Усанд сэлэх', freq: { t: 'week', n: 2 }, start: K('10-01') },
+    { id: 'j', name: 'Тэмдэглэл', start: K('10-01') }] };
+  const hist = {};
+  const add = (k, ...ids) => { hist[k] = hist[k] || {}; ids.forEach(i => hist[k][i] = '08:00'); };
+  for (let d = 1; d <= 17; d++) add(K(`11-${String(d).padStart(2, '0')}`), 'r');          // read 1–17 Nov
+  add(K('11-14'), 'j'); add(K('11-15'), 'j'); add(K('11-17'), 'j');                     // journal: Mon 16 missed
+  add(K('11-09'), 'g'); add(K('11-11'), 'g'); add(K('11-13'), 'g'); add(K('11-16'), 'g'); // runs on Mon/Wed/Fri only
+  add(K('11-04'), 's'); add(K('11-06'), 's'); add(K('11-10'), 's'); add(K('11-14'), 's'); add(K('11-17'), 's');
+  const { page } = await open(t, `()=>{localStorage.elsen_cfg=${JSON.stringify(JSON.stringify(cfg))};localStorage.elsen_hist=${JSON.stringify(JSON.stringify(hist))}}`,
+    { time: new Date(2026, 10, 18, 12, 0) });
+  const line = i => page.locator('#tasks .task').nth(i).locator('.st').textContent();
+  assert.equal(await line(0), '🔥 17 өдөр дараалан');                 // today not done yet: doesn't break it
+  assert.match(await line(1), /^🔥 4 өдөр дараалан · Да·Лх·Ба$/);      // Tue/Thu/Sat/Sun are not run days
+  assert.equal(await line(2), '🔥 5 удаа дараалан · 7 хоногт 1/2');    // weeks of 2+ in a row, this week still open
+  assert.equal(await line(3), '🔥 1 өдөр дараалан');                   // Monday (a due day) missed: only Tuesday counts
+  // tick reading: it becomes "18 дахь өдөр"
+  await page.locator('#tasks .task').nth(0).click();
+  assert.equal(await line(0), '🔥 18 дахь өдөр');
+  // the day's score: fixed habits due today; "2 a week" counts only on a day it's done
+  assert.equal(await page.textContent('#tot'), '3');
+  assert.deepEqual(await page.evaluate(() => snap[dayKey(new Date())]), ['r', 'g', 'j']);
+  // Thursday: running is not due — shown dimmed, not in the count, still tickable as an extra
+  await page.clock.setFixedTime(new Date(2026, 10, 19, 12, 0)); await page.evaluate(() => tick());
+  const run = page.locator('#tasks .task').nth(1);
+  assert.match(await run.getAttribute('class'), /\boff\b/);
+  assert.match(await line(1), /Өнөөдөр биш · Да·Лх·Ба/);
+  assert.equal(await page.textContent('#tot'), '2');
+  await run.click();
+  assert.equal(await page.textContent('#tot'), '3');                  // done on an extra day → counts that day
+  // Settings: frequency editor saves weekdays and "N a week"
+  await page.click('#openSet');
+  const box = page.locator('.editbox').nth(0);
+  await box.locator('.fq select').selectOption('week');
+  await box.locator('.fq input').fill('4');
+  await page.locator('.editbox').nth(3).locator('.fq select').selectOption('days');
+  await page.click('#save');
+  const saved = await page.evaluate(() => JSON.parse(localStorage.elsen_cfg).tasks.map(x => x.freq));
+  assert.deepEqual(saved, [{ t: 'week', n: 4 }, { t: 'days', d: [1, 3, 5] }, { t: 'week', n: 2 }, { t: 'days', d: [1, 3, 5] }]);
 });
