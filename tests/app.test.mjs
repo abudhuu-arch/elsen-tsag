@@ -478,3 +478,34 @@ test('"Ус уух 8 аяга" follows the water counter: taps add cups, it tick
   await page.reload();
   assert.equal(await page.evaluate(() => cfg.tasks[1].link), '');
 });
+
+test('data safety: a full copy is kept before the format upgrade; unknown fields and removed habits are never lost', async t => {
+  const old = { dayStart: '00:00', sleepS: '23:00', sleepE: '07:00', workS: '09:00', workE: '18:00',
+    tasks: [{ id: 't1', name: 'Гадаад хэл', future: { x: 1 } }, { id: 't5', name: 'Ном унших 30 минут' }] };
+  const hist = { [keyAgo(2)]: { t1: '08:00', t5: '21:00' }, [keyAgo(1)]: { t5: '20:00' } };
+  const { page } = await open(t, `()=>{localStorage.elsen_cfg=${JSON.stringify(JSON.stringify(old))};localStorage.elsen_hist=${JSON.stringify(JSON.stringify(hist))};localStorage.elsen_undo='"keep me out"'}`);
+  // untouched copy of the old data, made once, before anything was rewritten
+  const pre = await page.evaluate(() => JSON.parse(localStorage.elsen_premig_v1));
+  assert.deepEqual(JSON.parse(pre.data.elsen_cfg), old);
+  assert.deepEqual(JSON.parse(pre.data.elsen_hist), hist);
+  assert.ok(!('elsen_undo' in pre.data));
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.elsen_cfg).v), 2);
+  // a field this version doesn't know survives load and a save in Settings
+  await page.click('#openSet'); await page.click('#save');
+  assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.elsen_cfg).tasks[0].future), { x: 1 });
+  // removing a habit archives it: its history and its row in Stats stay
+  await page.click('#openSet');
+  await page.locator('.editbox').nth(1).locator('button.del').click();
+  await page.click('#save');
+  assert.equal(await page.locator('#tasks .task').count(), 1);
+  const c = await page.evaluate(() => JSON.parse(localStorage.elsen_cfg));
+  assert.deepEqual(c.archive.map(x => [x.id, x.name]), [['t5', 'Ном унших 30 минут']]);
+  assert.deepEqual(JSON.parse(await page.evaluate(() => localStorage.elsen_hist))[keyAgo(1)], { t5: '20:00' });
+  await page.reload();
+  const copy = await page.evaluate(() => localStorage.elsen_premig_v1);
+  assert.equal(JSON.parse(copy).at, pre.at);                                   // made once, never replaced
+  if (keyAgo(2).slice(0, 7) === keyAgo(0).slice(0, 7)) {
+    await page.click('nav.tabs button[data-v="v-stat"]');
+    assert.match(await page.textContent('#perTask'), /Ном унших 30 минут · архив/);
+  }
+});

@@ -652,6 +652,15 @@ const store = {
   get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},
   set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
 };
+// Data format version. Before the first upgrade to a new format, an untouched copy of every saved key
+// goes to elsen_premig_v<old>; nothing ever deletes it (restore and reset leave it alone too).
+const SCHEMA=2;
+try{ const raw=localStorage.getItem("elsen_cfg");
+  if(raw!=null){ let v=1; try{const o=JSON.parse(raw); if(o&&typeof o==="object"&&+o.v>0) v=+o.v}catch(e){}
+    const bk="elsen_premig_v"+v;
+    if(v<SCHEMA&&localStorage.getItem(bk)==null){ const data={};
+      for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i); if(/^elsen_/.test(k)&&!/^elsen_(undo|premig_)/.test(k)) data[k]=localStorage.getItem(k)}
+      localStorage.setItem(bk,JSON.stringify({at:new Date().toISOString(),data})) } } }catch(e){}
 let cfg = Object.assign({}, DEFAULT, store.get("elsen_cfg",{}));
 let hist = store.get("elsen_hist",{}); // {dayKey:{taskId:"HH:MM"}}  (unchanged format)
 // Migration: older saved tasks have only {id,name}. Add a timer length (read from the name,
@@ -676,8 +685,13 @@ const SHIFT_DEFAULT=()=>({on:false,every:7,cur:0,from:"",list:[
 cfg.tasks=cfg.tasks.filter(t=>isObj(t)&&t.id!=null&&typeof t.name==="string").map(t=>{
   const m=/(\d+)\s*(минут|мин)/i.exec(t.name);
   const min=typeof t.min==="number"&&isFinite(t.min)?Math.max(0,Math.min(600,Math.round(t.min))):(m?Math.min(600,+m[1]):0);
-  return {id:String(t.id),name:t.name,min,rem:isHM(t.rem)?t.rem:"",unit:typeof t.unit==="string"?t.unit.trim().slice(0,12):"",link:t.link==="water"?"water":""};
+  // ...t first: fields this version doesn't know (from a newer version or a backup) are kept, never dropped
+  return {...t,id:String(t.id),name:t.name,min,rem:isHM(t.rem)?t.rem:"",unit:typeof t.unit==="string"?t.unit.trim().slice(0,12):"",link:t.link==="water"?"water":""};
 });
+// Habits removed in Settings are kept here (with their history), so stats and old days still know them.
+cfg.archive=Array.isArray(cfg.archive)?cfg.archive.filter(t=>isObj(t)&&t.id!=null&&typeof t.name==="string").map(t=>({...t,id:String(t.id)})):[];
+cfg.archive=cfg.archive.filter(a=>!cfg.tasks.some(t=>t.id===a.id));
+const taskById=id=>cfg.tasks.find(t=>t.id===id)||cfg.archive.find(t=>t.id===id)||null;
 // Only one task can follow the water counter.
 {let seen=false; cfg.tasks.forEach(t=>{if(t.link==="water"){if(seen)t.link="";seen=true}})}
 // Once: a task named "Ус уух … N аяга" is joined to the water counter (and gives the goal). Unlinking later is kept.
@@ -687,6 +701,7 @@ if(!cfg.waterLinked){
   if(wt){wt.link="water"; const g=/(\d+)\s*аяга/i.exec(wt.name); if(g&&+g[1]>=1&&+g[1]<=20&&store.get("elsen_cfg",{}).waterGoal==null) cfg.waterGoal=+g[1]}   // only if no goal was set by hand
   store.set("elsen_cfg",cfg);
 }
+if(!(+cfg.v>=SCHEMA)){cfg.v=SCHEMA; store.set("elsen_cfg",cfg)}     // never lowered: a newer version's data stays marked as newer
 if(!isObj(hist)) hist={};
 for(const k in hist) if(!isObj(hist[k])) delete hist[k];
 // Timer state per day: {dayKey:{taskId:{acc:ms spent, run:start timestamp|null}}}
@@ -1142,7 +1157,9 @@ $("wPlus").onclick=()=>{const n=(water[dayKey(new Date())]||0)+1; buzz(n===cfg.w
 $("wMinus").onclick=()=>setWater((water[dayKey(new Date())]||0)-1);
 
 // A day is scored against the tasks it had (snapshot); days before snapshots existed use today's list.
-function scoreFor(k){const ids=snap[k]||cfg.tasks.map(t=>t.id), d=hist[k]||{};return{c:ids.filter(id=>d[id]).length,tot:ids.length}}
+// Which habits a day had: what was saved that day, or (a day the app wasn't opened) today's list plus habits archived later.
+function idsOn(k){return snap[k]||[...cfg.tasks,...cfg.archive.filter(a=>a.archived&&a.archived>k)].map(t=>t.id)}
+function scoreFor(k){const ids=idsOn(k), d=hist[k]||{};return{c:ids.filter(id=>d[id]).length,tot:ids.length}}
 
 /* ---------- task timers ---------- */
 const saveTm=()=>store.set("elsen_tm",tm);
@@ -1401,7 +1418,10 @@ $("save").onclick=()=>{
   shDraft.list=shDraft.list.filter(x=>x.name.trim()).map(x=>({...x,name:x.name.trim()}));
   shDraft.on=shDraft.on&&shDraft.list.length>0; shDraft.cur=Math.min(shDraft.cur,Math.max(0,shDraft.list.length-1));
   cfg.shifts=shDraft;
-  cfg.tasks=draft.filter(t=>t.name.trim()).map(t=>({id:t.id,name:t.name.trim(),min:t.min||0,rem:t.rem||"",unit:(t.unit||"").trim().slice(0,12),link:t.link==="water"?"water":""}));
+  const kept=draft.filter(t=>t.name.trim()).map(t=>({...t,id:t.id,name:t.name.trim(),min:t.min||0,rem:t.rem||"",unit:(t.unit||"").trim().slice(0,12),link:t.link==="water"?"water":""}));
+  // a removed habit goes to the archive with its history; it is never erased
+  cfg.tasks.filter(t=>!kept.some(x=>x.id===t.id)).forEach(t=>cfg.archive.push({...t,archived:dayKey(new Date())}));
+  cfg.tasks=kept;
   cfg.sound=$("soundOn").checked;
   cfg.sandSound=$("sandOn").checked; if(cfg.sandSound) unlockAudio();
   {const w=parseInt($("waterGoalIn").value,10); if(w>=0&&w<=20) cfg.waterGoal=w}
@@ -1695,8 +1715,8 @@ function renderStats(){
   if(!statSel||!statSel.startsWith(keyOf(y,m,1).slice(0,8))) statSel=(today.startsWith(keyOf(y,m,1).slice(0,8)))?today:null;
   if(statSel){
     const [sy,sm,sd]=statSel.split("-").map(Number), wd=new Date(sy,sm-1,sd).getDay();
-    const s=scoreFor(statSel), done=hist[statSel]||{}, ids=snap[statSel]||cfg.tasks.map(t=>t.id), dmin=dayMinutes(statSel);
-    const nameOf=id=>{const t=cfg.tasks.find(x=>x.id===id);return t?t.name:"(устгасан зүйл)"};
+    const s=scoreFor(statSel), done=hist[statSel]||{}, ids=idsOn(statSel), dmin=dayMinutes(statSel);
+    const nameOf=id=>{const t=taskById(id);return t?t.name:"(устгасан зүйл)"};
     info.innerHTML=`<div class="dh"><b>${MONTHS[sm-1]}ын ${sd}, ${WD_FULL[wd]}</b><span>${s.c}/${s.tot}${dmin>=1?` · ⏱ ${fmtDur(dmin)}`:""}</span></div><div class="dx"></div>`;
     const dx=info.querySelector(".dx"); dayExtras(statSel).forEach(x=>{const e=document.createElement("span"); e.textContent=x; dx.appendChild(e)});
     ids.forEach(id=>{
@@ -1704,7 +1724,7 @@ function renderStats(){
       const sp=(tm[statSel]||{})[id], mm=sp?tmSpent(sp)/60000:0;
       r.innerHTML=`<span class="ic">${done[id]?"✓":"○"}</span><span class="nm"></span><span class="at"></span>`;
       r.querySelector(".nm").textContent=nameOf(id);
-      const q=(qty[statSel]||{})[id], u=(cfg.tasks.find(x=>x.id===id)||{}).unit||"";
+      const q=(qty[statSel]||{})[id], u=(taskById(id)||{}).unit||"";
       r.querySelector(".at").textContent=[done[id]||"",mm>=1?fmtDur(mm):"",q?`${fmtQ(q)} ${u}`.trim():""].filter(Boolean).join(" · ");
       info.appendChild(r);
     });
@@ -1716,10 +1736,10 @@ function renderStats(){
   // per task
   const pt=$("perTask"); pt.innerHTML="";
   if(!counted.length){pt.innerHTML=`<div class="empty">Энэ сард бүртгэл алга</div>`; return}
-  cfg.tasks.forEach(t=>{
+  [...cfg.tasks,...cfg.archive].forEach(t=>{
     let have=0,did=0,tmin=0,qsum=0,qdays=0;
     counted.forEach(x=>{const q=(qty[x.k]||{})[t.id]; if(q){qsum+=q;qdays++}
-      const ids=snap[x.k]||cfg.tasks.map(q=>q.id); if(!ids.includes(t.id))return; have++;
+      const ids=idsOn(x.k); if(!ids.includes(t.id))return; have++;
       if((hist[x.k]||{})[t.id])did++; const sp=(tm[x.k]||{})[t.id]; if(sp)tmin+=tmSpent(sp)/60000});
     if(!have) return;
     const pct=Math.round(did/have*100);
@@ -1727,7 +1747,7 @@ function renderStats(){
     r.innerHTML=`<div class="r1"><span class="nm"></span><span class="n"><b>${did}</b>/${have} · ${pct}%</span></div><div class="bar2"><i style="width:${pct}%"></i></div>`+
       (tmin>=1?`<div class="r2">⏱ Нийт ${fmtDur(tmin)} зарцуулсан</div>`:"")+
       (qsum?`<div class="r2 q">📏 Нийт <b>${fmtQ(qsum)}</b> <span class="u"></span> · ${qdays} өдөр</div>`:"");
-    r.querySelector(".nm").textContent=t.name;
+    r.querySelector(".nm").textContent=t.name+(t.archived?" · архив":"");
     if(qsum) r.querySelector(".u").textContent=t.unit||"";
     pt.appendChild(r);
   });
@@ -1758,13 +1778,13 @@ function renderWeekReport(box,mon){
   if(W.full>1) lines.push(["🏆",`<b>${W.full}</b> өдөр бүгдийг биелүүлсэн`]);
   else if(best) lines.push(["🏆",`Хамгийн сайн өдөр: <b>${WD_FULL[(best.i+1)%7]}</b> <em>${best.s.c}/${best.s.tot}</em>`]);
   // weakest task (lowest share of the days it was on the list)
-  const per={}; W.on.forEach(d=>{(snap[d.k]||cfg.tasks.map(t=>t.id)).forEach(id=>{const p=per[id]||(per[id]={n:0,c:0}); p.n++; if((hist[d.k]||{})[id])p.c++})});
-  const nameOf=id=>{const t=cfg.tasks.find(x=>x.id===id);return t?t.name:null};
+  const per={}; W.on.forEach(d=>{idsOn(d.k).forEach(id=>{const p=per[id]||(per[id]={n:0,c:0}); p.n++; if((hist[d.k]||{})[id])p.c++})});
+  const nameOf=id=>{const t=taskById(id);return t?t.name:null};
   const weak=Object.entries(per).filter(([id,p])=>nameOf(id)&&p.c<p.n).sort((a,b)=>a[1].c/a[1].n-b[1].c/b[1].n)[0];
   if(weak) lines.push(["🌱",`Сул даалгавар: <b class="nm" data-id="${weak[0]}"></b> <em>${weak[1].c}/${weak[1].n} өдөр</em>`]);
   else lines.push(["🎉","Бүх даалгаврыг өдөр бүр биелүүлсэн"]);
   // amounts logged
-  cfg.tasks.filter(t=>t.unit).forEach(t=>{const sum=W.on.reduce((a,d)=>a+((qty[d.k]||{})[t.id]||0),0);
+  [...cfg.tasks,...cfg.archive].filter(t=>t.unit).forEach(t=>{const sum=W.on.reduce((a,d)=>a+((qty[d.k]||{})[t.id]||0),0);
     if(sum) lines.push(["📏",`<b class="nm" data-id="${t.id}"></b>: ${fmtQ(sum)} <span class="u" data-id="${t.id}"></span>`])});
   const sl=W.on.filter(d=>sleepLog[d.k]); if(sl.length) lines.push(["😴",`Нойр дунджаар <b>${fmtDur(sl.reduce((a,d)=>a+sleepMin(sleepLog[d.k]),0)/sl.length)}</b> <em>${sl.length} шөнө</em>`]);
   const wa=W.on.filter(d=>water[d.k]); if(wa.length) lines.push(["💧",`Ус дунджаар <b>${(wa.reduce((a,d)=>a+water[d.k],0)/wa.length).toFixed(1).replace(/\.0$/,"")}</b> аяга`]);
@@ -1772,7 +1792,7 @@ function renderWeekReport(box,mon){
   h+=lines.map(([i,t])=>`<div class="wl"><span class="ic">${i}</span><span>${t}</span></div>`).join("");
   box.innerHTML=h;
   box.querySelectorAll(".nm").forEach(e=>e.textContent=nameOf(e.dataset.id));      // names are user text: never as HTML
-  box.querySelectorAll(".u").forEach(e=>e.textContent=(cfg.tasks.find(x=>x.id===e.dataset.id)||{}).unit||"");
+  box.querySelectorAll(".u").forEach(e=>e.textContent=(taskById(e.dataset.id)||{}).unit||"");
 }
 let wkMon=null;
 function renderWeekStat(){
