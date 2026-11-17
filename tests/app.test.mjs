@@ -654,3 +654,28 @@ test('habit stacking: "after ___" is set in Settings and shown on the habit', as
   await page.click('#openSet'); await inp.fill('<b>x</b>'); await page.click('#save');
   assert.equal(await page.locator('#tasks .task').nth(4).locator('.st b').count(), 0);
 });
+
+test('stats follow habits: per-habit streaks, weekly goals, rest days, days with nothing due', async t => {
+  // Wednesday 18 Nov. Run Mon/Wed/Fri since 2 Nov; swim 2 a week since 2 Nov.
+  const cfg = { dayStart: '00:00', sleepS: '23:00', sleepE: '07:00', workS: '09:00', workE: '18:00', v: 2, tasks: [
+    { id: 'g', name: 'Гүйх', freq: { t: 'days', d: [1, 3, 5] }, start: '2026-11-02', dose: { from: 2, to: 5, step: 1, unit: 'км', since: '2026-11-02' } },
+    { id: 's', name: 'Сэлэх', freq: { t: 'week', n: 2 }, start: '2026-11-02' }] };
+  const hist = {}; const add = (d, id) => { const k = `2026-11-${String(d).padStart(2, '0')}`; (hist[k] = hist[k] || {})[id] = '07:00'; };
+  [2, 4, 6, 9, 11, 13, 16].forEach(d => add(d, 'g'));        // every run day up to Mon 16th
+  [3, 5, 10].forEach(d => add(d, 's'));                       // week 1: 2/2, week 2: 1/2, week 3: 0 so far
+  const { page } = await open(t, `()=>{localStorage.elsen_cfg=${JSON.stringify(JSON.stringify(cfg))};localStorage.elsen_hist=${JSON.stringify(JSON.stringify(hist))}}`,
+    { time: new Date(2026, 10, 18, 12, 0) });
+  await page.click('nav.tabs button[data-v="v-stat"]');
+  const rows = page.locator('#perTask .pt');
+  // run: 7 of 8 run days (today not yet) → 7/8; streak 7, path day 17, distance 4 of 5 km
+  assert.match(await rows.nth(0).textContent(), /7\/8 · 88%/);
+  assert.equal(await rows.nth(0).locator('.hb').textContent(), '🔥 7 одоо · хамгийн урт 7 · зам 17/66 · Да·Лх·Ба · 📈 4/5 км');
+  // swim: weeks 2–8 Nov (2 of 2), 9–15 (1 of 2), 16–18 (0 of 2) → 3/6
+  assert.match(await rows.nth(1).textContent(), /3\/6 удаа · 50%/);
+  assert.match(await rows.nth(1).locator('.hb').textContent(), /^хамгийн урт 2 · зам 17\/66 · 7 хоногт 2 удаа$/);
+  // average counts only days with something due: Sundays/Tuesdays here have nothing fixed
+  const avg = await page.evaluate(() => monthSummary(2026, 10, firstUseKey(), dayKey(new Date())).avg);
+  assert.ok(avg > 50, `average ${avg}% should ignore empty days`);
+  // weekly report: the weak habit is the swim, against its goal of 2
+  assert.match(await page.textContent('#wkStat'), /Сул даалгавар: Сэлэх 0\/2 удаа/);
+});

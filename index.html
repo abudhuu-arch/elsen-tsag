@@ -566,7 +566,7 @@ input[type=time]::-webkit-date-and-time-value{text-align:left}
       <div class="tiles" id="moreTiles"></div>
     </section>
     <section>
-      <div class="sh"><h2>Даалгавар тус бүр</h2></div>
+      <div class="sh"><h2>Дадал тус бүр</h2></div>
       <div class="card" id="perTask"></div>
     </section>
   </div>
@@ -1272,6 +1272,25 @@ function streakOf(t,today){
   }
   return s;
 }
+// A day that keeps the whole-day streak: every habit due was done, or had a rest day.
+function dayKept(k){const ids=idsOn(k); return ids.length>0&&ids.every(id=>{const t=taskById(id); return doneOn({id},k)||(t&&rested(t,k))})}
+// Longest streak ever (same rules as streakOf, walked forward).
+function bestStreakOf(t){
+  const today=dayKey(new Date()), st=startOf(t); let run=0,best=0;
+  if((t.freq||{}).t==="week"){
+    for(let mon=mondayOf(st);mon<=today;mon=addDays(mon,7)){
+      let c=0,r=0,avail=0;
+      for(let i=0;i<7;i++){const k=addDays(mon,i); if(k>today||k<st) continue; avail++; if(doneOn(t,k)) c++; else if(restPicked(t,k)&&rested(t,k)) r++}
+      if(mon===mondayOf(today)||c+r>=Math.min(t.freq.n,avail)){run+=c; best=Math.max(best,run)} else run=0;
+    }
+    return best;
+  }
+  for(let k=st;k<=today;k=addDays(k,1)){
+    if(doneOn(t,k)){run++; best=Math.max(best,run)}
+    else if(k!==today&&fixedDue(t,k)&&!rested(t,k)) run=0;
+  }
+  return best;
+}
 // Mongolian ordinal: 1 дэх, 2 дахь, 4 дэх, 9 дэх, 40 дэх, 12 дахь…
 function ordSuf(n){const u=n%10, d=Math.floor(n/10)%10; const w=u||d; return (w===1&&u)||w===4||w===9?"дэх":"дахь"}
 const WD_MON=["Да","Мя","Лх","Пү","Ба","Бя","Ня"];          // Monday first
@@ -1437,7 +1456,7 @@ function renderWeek(){
     const d=new Date(base);d.setDate(base.getDate()-i);
     const k=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
     const {c,tot}=scoreFor(k);
-    const ok=tot&&idsOn(k).every(id=>{const t=taskById(id); return (hist[k]||{})[id]||(t&&rested(t,k))});
+    const ok=dayKept(k);
     if(tot&&c===tot) s++; else if(i===0) continue; else if(!tot&&k>=firstUseKey()) continue; else if(ok) continue; else break;
   }
   $("streak").innerHTML = s ? `Тасралтгүй <b>${s}</b> өдөр бүгдийг биелүүлсэн` : `Өнөөдрөөс эхлээд дараалал үүсгээрэй`;
@@ -1854,11 +1873,11 @@ function monthSummary(y,m,first,today){
   const nDays=new Date(y,m+1,0).getDate(), days=[];
   for(let d=1;d<=nDays;d++){const k=keyOf(y,m,d); days.push({d,k,on:k>=first&&k<=today})}
   const counted=days.filter(x=>x.on);
-  let full=0,sumPct=0,run=0,best=0,mins=0;
-  counted.forEach(x=>{const s=scoreFor(x.k); x.s=s; sumPct+=s.tot?s.c/s.tot:0;
-    if(s.tot&&s.c===s.tot){full++;run++;best=Math.max(best,run)} else if(x.k!==today) run=0;
+  let full=0,sumPct=0,nPct=0,run=0,best=0,mins=0;
+  counted.forEach(x=>{const s=scoreFor(x.k); x.s=s; if(s.tot){sumPct+=s.c/s.tot; nPct++}
+    if(s.tot&&s.c===s.tot){full++;run++;best=Math.max(best,run)} else if(x.k!==today&&s.tot&&!dayKept(x.k)) run=0;   // nothing due / rest day: no break
     mins+=dayMinutes(x.k)});
-  return {days,counted,full,best,mins,avg:counted.length?Math.round(sumPct/counted.length*100):0};
+  return {days,counted,full,best,mins,avg:nPct?Math.round(sumPct/nPct*100):0};
 }
 function renderStats(){
   const today=dayKey(new Date()), [ty,tmo]=today.split("-").map(Number), first=firstUseKey();
@@ -1886,7 +1905,7 @@ function renderStats(){
 
   // which weekday goes best / worst (needs at least two weeks of data)
   const wk=[0,1,2,3,4,5,6].map(()=>({s:0,n:0}));
-  counted.forEach(x=>{if(x.k===today)return; const w=new Date(y,m,x.d).getDay(); wk[w].s+=x.s.tot?x.s.c/x.s.tot:0; wk[w].n++});
+  counted.forEach(x=>{if(x.k===today||!x.s.tot)return; const w=new Date(y,m,x.d).getDay(); wk[w].s+=x.s.c/x.s.tot; wk[w].n++});
   const ranked=wk.map((v,i)=>({i,p:v.n>=2?v.s/v.n:null})).filter(v=>v.p!==null).sort((a,b)=>b.p-a.p);
   const ins=$("insight");
   // only name a weekday when it clearly stands out (no ties, ≥10 points apart from the rest)
@@ -1940,17 +1959,29 @@ function renderStats(){
   const pt=$("perTask"); pt.innerHTML="";
   if(!counted.length){pt.innerHTML=`<div class="empty">Энэ сард бүртгэл алга</div>`; return}
   [...cfg.tasks,...cfg.archive].forEach(t=>{
-    let have=0,did=0,tmin=0,qsum=0,qdays=0;
+    let have=0,did=0,tmin=0,qsum=0,qdays=0,rests=0;
+    const wkly=(t.freq||{}).t==="week", weeks={};
     counted.forEach(x=>{const q=(qty[x.k]||{})[t.id]; if(q){qsum+=q;qdays++}
-      const ids=idsOn(x.k); if(!ids.includes(t.id))return; have++;
-      if((hist[x.k]||{})[t.id])did++; const sp=(tm[x.k]||{})[t.id]; if(sp)tmin+=tmSpent(sp)/60000});
+      const sp=(tm[x.k]||{})[t.id]; if(sp)tmin+=tmSpent(sp)/60000;
+      if(x.k<startOf(t)) return;
+      if(rested(t,x.k)&&x.k<today||restPicked(t,x.k)&&!doneOn(t,x.k)) rests++;
+      if(wkly){const w=weeks[mondayOf(x.k)]||(weeks[mondayOf(x.k)]={c:0,n:0}); w.n++; if(doneOn(t,x.k)) w.c++; return}
+      if(!idsOn(x.k).includes(t.id)) return; have++; if(doneOn(t,x.k)) did++});
+    // "N a week": the month's weekly goals (a part week asks for no more than its days)
+    if(wkly) Object.values(weeks).forEach(w=>{const need=Math.min(t.freq.n,w.n); have+=need; did+=Math.min(w.c,need)});
     if(!have) return;
     const pct=Math.round(did/have*100);
     const r=document.createElement("div"); r.className="pt";
-    r.innerHTML=`<div class="r1"><span class="nm"></span><span class="n"><b>${did}</b>/${have} · ${pct}%</span></div><div class="bar2"><i style="width:${pct}%"></i></div>`+
+    const live=!t.archived, cur=live?streakOf(t,today):0, best=bestStreakOf(t), pd=pathDay(t,today);
+    const facts=[cur?`🔥 ${cur} одоо`:"",best?`хамгийн урт ${best}`:"",live?(pd>=PATH?"66 хоног ✓":`зам ${pd}/${PATH}`):"",
+      (t.freq||{}).t!=="daily"&&t.freq?freqText(t.freq):"",rests?`☾ ${rests} амарсан`:"",
+      t.dose&&live?`📈 ${fmtQ(doseNow(t,today))}/${fmtQ(t.dose.to)} ${t.dose.unit}`:""].filter(Boolean).join(" · ");
+    r.innerHTML=`<div class="r1"><span class="nm"></span><span class="n"><b>${did}</b>/${have}${wkly?" удаа":""} · ${pct}%</span></div><div class="bar2"><i style="width:${pct}%"></i></div>`+
+      (facts?`<div class="r2 hb"></div>`:"")+
       (tmin>=1?`<div class="r2">⏱ Нийт ${fmtDur(tmin)} зарцуулсан</div>`:"")+
       (qsum?`<div class="r2 q">📏 Нийт <b>${fmtQ(qsum)}</b> <span class="u"></span> · ${qdays} өдөр</div>`:"");
     r.querySelector(".nm").textContent=t.name+(t.archived?" · архив":"");
+    if(facts) r.querySelector(".hb").textContent=facts;
     if(qsum) r.querySelector(".u").textContent=t.unit||"";
     pt.appendChild(r);
   });
@@ -1982,9 +2013,12 @@ function renderWeekReport(box,mon){
   else if(best) lines.push(["🏆",`Хамгийн сайн өдөр: <b>${WD_FULL[(best.i+1)%7]}</b> <em>${best.s.c}/${best.s.tot}</em>`]);
   // weakest task (lowest share of the days it was on the list)
   const per={}; W.on.forEach(d=>{idsOn(d.k).forEach(id=>{const p=per[id]||(per[id]={n:0,c:0}); p.n++; if((hist[d.k]||{})[id])p.c++})});
+  // "N a week" habits: measured against N, not against the days they happened to be done
+  cfg.tasks.filter(t=>(t.freq||{}).t==="week").forEach(t=>{const days=W.on.filter(d=>d.k>=startOf(t)); if(!days.length) return;
+    const n=Math.min(t.freq.n,days.length); per[t.id]={n,c:Math.min(n,days.filter(d=>doneOn(t,d.k)).length)}});
   const nameOf=id=>{const t=taskById(id);return t?t.name:null};
   const weak=Object.entries(per).filter(([id,p])=>nameOf(id)&&p.c<p.n).sort((a,b)=>a[1].c/a[1].n-b[1].c/b[1].n)[0];
-  if(weak) lines.push(["🌱",`Сул даалгавар: <b class="nm" data-id="${weak[0]}"></b> <em>${weak[1].c}/${weak[1].n} өдөр</em>`]);
+  if(weak) lines.push(["🌱",`Сул даалгавар: <b class="nm" data-id="${weak[0]}"></b> <em>${weak[1].c}/${weak[1].n} ${((taskById(weak[0])||{}).freq||{}).t==="week"?"удаа":"өдөр"}</em>`]);
   else lines.push(["🎉","Бүх даалгаврыг өдөр бүр биелүүлсэн"]);
   // amounts logged
   [...cfg.tasks,...cfg.archive].filter(t=>t.unit).forEach(t=>{const sum=W.on.reduce((a,d)=>a+((qty[d.k]||{})[t.id]||0),0);
