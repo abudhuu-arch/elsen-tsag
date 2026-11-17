@@ -67,7 +67,7 @@ test('old saved data migrates without losing history', async t => {
   const hist = { [keyAgo(3)]: { t1: '08:00', t5: '21:00' } };
   const { page } = await open(t, `()=>{localStorage.elsen_cfg=${JSON.stringify(JSON.stringify({ dayStart: '00:00', sleepS: '23:00', sleepE: '07:00', workS: '09:00', workE: '18:00', tasks: [{ id: 't1', name: 'Гадаад хэл' }, { id: 't5', name: 'Ном унших 30 минут' }] }))};localStorage.elsen_hist=${JSON.stringify(JSON.stringify(hist))}}`);
   const tasks = await page.evaluate(() => cfg.tasks);
-  assert.deepEqual(tasks, [{ id: 't1', name: 'Гадаад хэл', min: 0, rem: '', unit: '', link: '', freq: { t: 'daily' } , dose: null }, { id: 't5', name: 'Ном унших 30 минут', min: 30, rem: '', unit: '', link: '', freq: { t: 'daily' } , dose: null }]);
+  assert.deepEqual(tasks, [{ id: 't1', name: 'Гадаад хэл', min: 0, rem: '', unit: '', link: '', freq: { t: 'daily' } , dose: null, after: '' }, { id: 't5', name: 'Ном унших 30 минут', min: 30, rem: '', unit: '', link: '', freq: { t: 'daily' } , dose: null, after: '' }]);
   assert.deepEqual(JSON.parse(await page.evaluate(() => localStorage.elsen_hist)), hist);
   assert.deepEqual(await page.$$eval('.tbtn', b => b.map(x => x.textContent)), ['▶ 30м']);
 });
@@ -82,7 +82,7 @@ test('corrupted or hand-edited data does not break the app', async t => {
   const { page } = await open(t, `()=>{const b=${JSON.stringify(bad)};for(const k in b)localStorage.setItem(k,JSON.stringify(b[k]))}`);
   const c = await page.evaluate(() => cfg);
   assert.equal(c.dayStart, '00:00'); assert.equal(c.sleepS, '23:00');
-  assert.deepEqual(c.tasks, [{ id: 't1', name: 'Ном 20 мин', min: 20, rem: '', unit: '', link: '', freq: { t: 'daily' } , dose: null }, { id: '7', name: 'Гүйх', min: 600, rem: '', unit: '', link: '', freq: { t: 'daily' } , dose: null }]);
+  assert.deepEqual(c.tasks, [{ id: 't1', name: 'Ном 20 мин', min: 20, rem: '', unit: '', link: '', freq: { t: 'daily' } , dose: null, after: '' }, { id: '7', name: 'Гүйх', min: 600, rem: '', unit: '', link: '', freq: { t: 'daily' } , dose: null, after: '' }]);
   assert.match(await page.textContent('#clock'), /^\d\d:\d\d:\d\d$/);
   for (const v of ['v-sw', 'v-food', 'v-stat']) await page.click(`nav.tabs button[data-v="${v}"]`);
 });
@@ -554,8 +554,8 @@ test('habits: own streak per habit, frequency (daily / N a week / weekdays), day
   // Settings: frequency editor saves weekdays and "N a week"
   await page.click('#openSet');
   const box = page.locator('.editbox').nth(0);
-  await box.locator('.fq:not(.dose) select').selectOption('week');
-  await box.locator('.fq:not(.dose) input').fill('4');
+  await box.locator('.fq:not(.dose):not(.after) select').selectOption('week');
+  await box.locator('.fq:not(.dose):not(.after) input').fill('4');
   await page.locator('.editbox').nth(3).locator('.fq select').selectOption('days');
   await page.click('#save');
   const saved = await page.evaluate(() => JSON.parse(localStorage.elsen_cfg).tasks.map(x => x.freq));
@@ -638,4 +638,19 @@ test('start small: 5 → 30 minutes, +5 every 7 days; the timer follows; changin
   await page.click('#openSet');
   await box.locator('input.dn').nth(0).fill(''); await page.click('#save');
   assert.equal(await page.evaluate(() => cfg.tasks[0].dose), null);
+});
+
+test('habit stacking: "after ___" is set in Settings and shown on the habit', async t => {
+  const { page } = await open(t);
+  await page.click('#openSet');
+  const inp = page.locator('.editbox').nth(4).locator('.after input');
+  assert.equal(await inp.getAttribute('list'), 'afterIdeas');
+  assert.ok(await page.locator('#afterIdeas option').count() >= 5);
+  await inp.fill('  Оройн хоолны ');
+  await page.click('#save');
+  assert.match(await page.locator('#tasks .task').nth(4).locator('.st').textContent(), /^🔗 Оройн хоолны дараа/);
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.elsen_cfg).tasks[4].after), 'Оройн хоолны');
+  // user text never becomes HTML
+  await page.click('#openSet'); await inp.fill('<b>x</b>'); await page.click('#save');
+  assert.equal(await page.locator('#tasks .task').nth(4).locator('.st b').count(), 0);
 });

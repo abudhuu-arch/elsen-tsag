@@ -125,6 +125,7 @@ h2{font-family:"Cormorant Garamond",serif;font-size:24px;font-weight:600;color:v
 .opts input:disabled{opacity:.45}
 .fq input.dn{width:52px}
 .fq input.du{width:70px}
+.fq.after input{flex:1;min-width:0;max-width:220px}
 .fq input{background:var(--bg2);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:7px 8px;font:inherit;font-size:14px}
 .fq .wdb{width:34px;height:32px;border-radius:9px;border:1px solid var(--line);background:var(--bg2);color:var(--mute);font:inherit;font-size:12px;cursor:pointer}
 .fq .wdb.on{background:var(--sand);border-color:var(--sand);color:#2a1d0c}
@@ -722,7 +723,7 @@ cfg.tasks=cfg.tasks.filter(t=>isObj(t)&&t.id!=null&&typeof t.name==="string").ma
   const min=typeof t.min==="number"&&isFinite(t.min)?Math.max(0,Math.min(600,Math.round(t.min))):(m?Math.min(600,+m[1]):0);
   // ...t first: fields this version doesn't know (from a newer version or a backup) are kept, never dropped
   return {...t,id:String(t.id),name:t.name,min,rem:isHM(t.rem)?t.rem:"",unit:typeof t.unit==="string"?t.unit.trim().slice(0,12):"",link:t.link==="water"?"water":"",
-    freq:normFreq(t.freq),dose:normDose(t.dose),...(isKey(t.start)?{start:t.start}:{})};
+    freq:normFreq(t.freq),dose:normDose(t.dose),after:typeof t.after==="string"?t.after.trim().slice(0,40):"",...(isKey(t.start)?{start:t.start}:{})};
 });
 // Habits removed in Settings are kept here (with their history), so stats and old days still know them.
 cfg.archive=Array.isArray(cfg.archive)?cfg.archive.filter(t=>isObj(t)&&t.id!=null&&typeof t.name==="string").map(t=>({...t,id:String(t.id)})):[];
@@ -1290,6 +1291,7 @@ const pathDay=(t,k)=>daysBetween(startOf(t),k)+1;
 // The line under a habit's name: streak, and how often it is due.
 function habitLine(t,k){
   const s=streakOf(t,k), wk=(t.freq||{}).t==="week", p=[];
+  if(t.after) p.push(`🔗 ${t.after} дараа`);
   if(s>0) p.push(doneOn(t,k)?`🔥 ${s} ${ordSuf(s)} ${wk?"удаа":"өдөр"}`:`🔥 ${s} ${wk?"удаа":"өдөр"} дараалан`);
   if(!doneOn(t,k)&&restPicked(t,k)) p.push("☾ Амралтын өдөр");
   if(t.dose){const v=doseNow(t,k); p.push(v===t.dose.to?`🎯 ${fmtQ(v)} ${t.dose.unit}`:`📈 ${fmtQ(v)} → ${fmtQ(t.dose.to)} ${t.dose.unit}`)}
@@ -1515,6 +1517,8 @@ function closeSettings(){closeSheetUI(); if(history.state&&history.state.sheet) 
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&$("sheet").classList.contains("on"))closeSettings()});
 function renderEdit(){
   const l=$("editList"); l.innerHTML="";
+  if(!$("afterIdeas")){const dl=document.createElement("datalist"); dl.id="afterIdeas";
+    AFTER_IDEAS.forEach(x=>{const o=document.createElement("option"); o.value=x; dl.appendChild(o)}); document.body.appendChild(dl)}
   draft.forEach((t,i)=>{
     const wrap=document.createElement("div");wrap.className="editbox";
     const r=document.createElement("div");r.className="edit";
@@ -1538,6 +1542,7 @@ function renderEdit(){
     o.appendChild(lw);
     o.appendChild(freqEditor(t));
     o.appendChild(doseEditor(t));
+    o.appendChild(afterEditor(t));
     const mv=document.createElement("div"); mv.className="mv";
     [["↑",-1,"Дээш"],["↓",1,"Доош"]].forEach(([s,d,lab])=>{
       const x=document.createElement("button"); x.textContent=s; x.setAttribute("aria-label",lab+": "+(t.name||"зүйл"));
@@ -1575,6 +1580,17 @@ function doseEditor(t){
   w.append(a,ar,b,u,pl,st);
   return w;
 }
+// Habit stacking: "after ___" ties the new habit to something already done every day.
+const AFTER_IDEAS=["Сэрсний","Өглөөний цайны","Шүдээ угаасны","Ажлын","Үдийн хоолны","Оройн хоолны","Унтахын өмнө, шүдээ угаасны"];
+function afterEditor(t){
+  const w=document.createElement("label"); w.className="fq after";
+  w.innerHTML=`<span>🔗</span>`;
+  const i=document.createElement("input"); i.type="text"; i.maxLength=40; i.value=t.after||""; i.placeholder="Өглөөний цайны";
+  i.setAttribute("list","afterIdeas"); i.setAttribute("aria-label","Юуны дараа хийх: "+(t.name||"зүйл"));
+  i.oninput=()=>t.after=i.value;
+  const d=document.createElement("span"); d.textContent="дараа";
+  w.append(i,d); return w;
+}
 // How often: every day / N times a week / chosen weekdays
 function freqEditor(t){
   const w=document.createElement("div"); w.className="fq";
@@ -1605,7 +1621,7 @@ $("save").onclick=()=>{
   shDraft.list=shDraft.list.filter(x=>x.name.trim()).map(x=>({...x,name:x.name.trim()}));
   shDraft.on=shDraft.on&&shDraft.list.length>0; shDraft.cur=Math.min(shDraft.cur,Math.max(0,shDraft.list.length-1));
   cfg.shifts=shDraft;
-  const kept=draft.filter(t=>t.name.trim()).map(t=>({...t,id:t.id,name:t.name.trim(),min:t.min||0,rem:t.rem||"",unit:(t.unit||"").trim().slice(0,12),link:t.link==="water"?"water":"",freq:normFreq(t.freq),dose:doseSaved(t)}));
+  const kept=draft.filter(t=>t.name.trim()).map(t=>({...t,id:t.id,name:t.name.trim(),min:t.min||0,rem:t.rem||"",unit:(t.unit||"").trim().slice(0,12),link:t.link==="water"?"water":"",freq:normFreq(t.freq),dose:doseSaved(t),after:(t.after||"").trim().slice(0,40)}));
   // a removed habit goes to the archive with its history; it is never erased
   cfg.tasks.filter(t=>!kept.some(x=>x.id===t.id)).forEach(t=>cfg.archive.push({...t,archived:dayKey(new Date())}));
   cfg.tasks=kept; applyDose();
