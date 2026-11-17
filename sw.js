@@ -1,5 +1,5 @@
 /* Элсэн цаг — service worker: works offline by caching every file the app needs. */
-const VERSION = "elsen-v6";
+const VERSION = "elsen-v7";
 const SHELL = [
   "./",
   "./index.html",

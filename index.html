@@ -168,8 +168,8 @@ button.day{font:inherit;color:inherit;cursor:pointer;min-width:0}
 .row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
 .row label{font-size:14px;color:var(--mute)}
 .row .pair{display:flex;gap:6px;align-items:center;color:var(--dim)}
-input[type=time],input[type=text]{background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:9px 10px;font:inherit;font-size:14px}
-input[type=time]{color-scheme:dark}
+input[type=time],input[type=text],input[type=number],input[type=date]{background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:9px 10px;font:inherit;font-size:14px}
+input[type=time],input[type=date],input[type=number]{color-scheme:dark}
 .edit{display:flex;gap:8px;margin-bottom:8px}
 .edit input{flex:1}
 .del{background:none;border:1px solid var(--line);color:#c77;border-radius:10px;width:40px;cursor:pointer;font-size:18px}
@@ -820,6 +820,8 @@ document.documentElement.lang=cfg.lang;
 // The page's fixed text (HTML) is Mongolian; swap it once at start. Text drawn later by the script uses T().
 (function translateStatic(){
   if(!LI()) return;
+  // an <option> without value="" takes its text as the value: pin the Mongolian one first, it is what gets saved
+  document.querySelectorAll("option:not([value])").forEach(o=>o.setAttribute("value",o.textContent));
   document.title=T(document.title);
   const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,{acceptNode:n=>/^(SCRIPT|STYLE)$/.test(n.parentNode.nodeName)?2:1});
   for(let n;(n=w.nextNode());){const t=n.nodeValue.trim(); if(t&&/[А-Яа-яӨөҮү]/.test(t)){const r=T(t); if(r!==t) n.nodeValue=n.nodeValue.replace(t,r)}}
@@ -2434,7 +2436,7 @@ function renderPlan(){
   const box=$("plan"), st=$("genStatus"); box.innerHTML="";
   if(!plan){st.textContent="";return}
   const d=new Date(plan.at);
-  st.textContent=T(plan.src==="claude"?"Claude гаргасан":"Апп дотор бэлдсэн (офлайн)")+` · ${d.getMonth()+1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  st.textContent=T(plan.src==="claude"?"Claude гаргасан":"Апп дотор бэлдсэн (офлайн)")+` · ${LI()?intl({day:"numeric",month:"numeric"}).format(d):`${d.getMonth()+1}/${d.getDate()}`} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   const tabs=document.createElement("div"); tabs.className="daytabs";
   plan.days.forEach((x,i)=>{const c=document.createElement("button");c.className="chip"+(i===planDay?" on":"");c.textContent=x.day;
     c.onclick=()=>{planDay=i;renderPlan()};tabs.appendChild(c)});

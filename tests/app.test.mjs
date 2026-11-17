@@ -823,6 +823,11 @@ test('language: Settings switches mn → en → cs; every text, date and the dat
   assert.equal(await page.textContent('#date'), 'Út 17. listopadu 2026');
   await page.click('nav.tabs button[data-v="v-stat"]');
   assert.equal(await page.textContent('#mTitle'), 'Listopad 2026');
+  // food tab choices keep their saved (Mongolian) values and show Czech text
+  await page.click('nav.tabs button[data-v="v-food"]');
+  assert.equal(await page.inputValue('#goal'), 'Эрүүл хооллолт');
+  assert.equal(await page.$eval('#goal', s => s.selectedOptions[0].textContent), 'Zdravé stravování');
+  assert.equal(await page.inputValue('#shift'), 'Өглөөний ээлж');
   // no Mongolian left on any tab (the person's own habit names aside)
   for (const v of ['v-day', 'v-sw', 'v-food', 'v-stat']) {
     await page.click(`nav.tabs button[data-v="${v}"]`);
@@ -884,4 +889,47 @@ test('badges: 7 in a row earns one with a small celebration; old streaks earn qu
   assert.equal(story[0], 'Энэ сард «Ном унших»-д 8ц 30м зарцууллаа.');
   assert.equal(story[1], '«Ном унших»: нийт 170 хуудас.');
   assert.match(story.join(' '), /Шинэ тэмдэг: 3\./);
+});
+
+test('offline in English: translations, lessons and the library come from the cache', async t => {
+  const { page, ctx } = await open(t, `()=>{localStorage.elsen_hist='{}';localStorage.elsen_cfg=JSON.stringify({lang:'en'})}`);
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await page.reload();
+  await ctx.setOffline(true);
+  await page.reload();
+  assert.equal(await page.title(), 'Sand Clock');
+  assert.match(await page.textContent('#lessonK'), /^Lesson of the day/);
+  await page.click('#openLib');
+  assert.equal(await page.locator('#libBody .li').first().locator('.t').textContent(), 'Learn new words');
+  await ctx.setOffline(false);
+});
+
+test('old phone data: every saved key survives the upgrade and language changes untouched', async t => {
+  const k = keyAgo;
+  const old = {
+    elsen_cfg: { dayStart: '04:00', sleepS: '23:30', sleepE: '06:30', workS: '08:00', workE: '17:00', tasks: [{ id: 't1', name: 'Гадаад хэл 15 минут', min: 15, rem: '07:30', unit: '' }, { id: 't2', name: 'Ус уух 8 аяга' }, { id: 't5', name: 'Ном унших 30 минут', unit: 'хуудас' }] },
+    elsen_hist: { [k(1)]: { t1: '07:40', t5: '22:00' }, [k(2)]: { t1: '07:35' } },
+    elsen_tm: { [k(1)]: { t1: { acc: 900000, run: null, base: 0 } } },
+    elsen_snap: { [k(1)]: ['t1', 't2', 't5'] },
+    elsen_water: { [k(1)]: 6 }, elsen_qty: { [k(1)]: { t5: 24 } }, elsen_sleep: { [k(1)]: { s: '23:40', w: '06:30' } },
+    elsen_review: { [k(1)]: { r: 4, n: 'Сайн өдөр' } }, elsen_pantry: ['Өндөг'], elsen_plan: null
+  };
+  const { page } = await open(t, `()=>{const o=${JSON.stringify(old)};for(const k in o) if(o[k]!=null) localStorage.setItem(k,JSON.stringify(o[k]))}`);
+  const keep = ['elsen_hist', 'elsen_tm', 'elsen_snap', 'elsen_water', 'elsen_qty', 'elsen_sleep', 'elsen_review', 'elsen_pantry'];
+  // every old entry is still there, unchanged (today's new entries may be added)
+  const same = async (why) => { const now = await page.evaluate(ks => ks.map(k => JSON.parse(localStorage.getItem(k))), keep);
+    keep.forEach((k, i) => { if (Array.isArray(old[k])) assert.deepEqual(now[i], old[k], k + ' ' + why);
+      else for (const d in old[k]) assert.deepEqual(now[i][d], old[k][d], `${k} ${d} ${why}`); }); };
+  await same('after upgrade');
+  assert.ok(await page.isHidden('#onb'));
+  for (const lang of ['en', 'cs', 'mn']) {
+    await page.click('#openSet'); await page.selectOption('#langSel', lang);
+    await page.waitForFunction(l => document.documentElement.lang === l, lang);
+    await same(lang);
+    assert.equal(await page.locator('#tasks .task').count(), 3);
+  }
+  const c = await page.evaluate(() => JSON.parse(localStorage.elsen_cfg));
+  assert.deepEqual(c.tasks.map(x => [x.id, x.name, x.rem]), [['t1', 'Гадаад хэл 15 минут', '07:30'], ['t2', 'Ус уух 8 аяга', ''], ['t5', 'Ном унших 30 минут', '']]);
+  assert.equal(c.dayStart, '04:00');
+  assert.deepEqual(JSON.parse(JSON.parse(await page.evaluate(() => localStorage.elsen_premig_v1)).data.elsen_cfg), old.elsen_cfg);
 });
