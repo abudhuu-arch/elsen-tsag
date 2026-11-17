@@ -826,7 +826,7 @@ test('language: Settings switches mn → en → cs; every text, date and the dat
   // no Mongolian left on any tab (the person's own habit names aside)
   for (const v of ['v-day', 'v-sw', 'v-food', 'v-stat']) {
     await page.click(`nav.tabs button[data-v="${v}"]`);
-    const txt = await page.evaluate(() => { const c = document.querySelector('.view.on').cloneNode(true); c.querySelectorAll('#tasks,#swFor,#perTask,#wkStat,#wkDay,#dayInfo').forEach(e => e.remove()); return c.innerText; });
+    const txt = await page.evaluate(() => { const c = document.querySelector('.view.on').cloneNode(true); c.querySelectorAll('#tasks,#swFor,#perTask,#wkStat,#wkDay,#dayInfo,#badges,#mSum').forEach(e => e.remove()); return c.innerText; });
     assert.doesNotMatch(txt, /[А-Яа-яӨөҮү]/, v);
   }
   await page.click('#openSet');
@@ -847,4 +847,41 @@ test('translations: every text the code shows has English and Czech', () => {
   assert.deepEqual(missing, []);
   for (const l of I18N.lessons) assert.equal(l.length, 4);
   for (const x of I18N.library) assert.equal(x.name.length, 3);
+});
+
+test('badges: 7 in a row earns one with a small celebration; old streaks earn quietly; badge page in Stats', async t => {
+  const cfg = { dayStart: '00:00', sleepS: '23:00', sleepE: '07:00', workS: '09:00', workE: '18:00', v: 2, tasks: [
+    { id: 'r', name: 'Ном унших', start: '2026-10-01', unit: 'хуудас' }, { id: 'w', name: 'Алхах', start: '2026-11-10' }] };
+  const hist = {}, qty = {}, tmd = {};
+  for (let d = 1; d <= 31; d++) { const k = `2026-10-${String(d).padStart(2, '0')}`; hist[k] = { r: '08:00' }; }   // 31 in October
+  for (let d = 1; d <= 17; d++) { const k = `2026-11-${String(d).padStart(2, '0')}`; hist[k] = { r: '08:00' }; qty[k] = { r: 10 }; tmd[k] = { r: { acc: 30 * 60000, run: null, base: 0 } }; }
+  for (let d = 12; d <= 17; d++) hist[`2026-11-${d}`].w = '19:00';                                                // walking: 6 days
+  const { page } = await open(t, `()=>{localStorage.elsen_cfg=${JSON.stringify(JSON.stringify(cfg))};localStorage.elsen_hist=${JSON.stringify(JSON.stringify(hist))};localStorage.elsen_qty=${JSON.stringify(JSON.stringify(qty))};localStorage.elsen_tm=${JSON.stringify(JSON.stringify(tmd))}}`,
+    { time: new Date(2026, 10, 18, 12, 0) });
+  // reading's past streak (48 days): 7 and 21 earned quietly at load
+  let b = await page.evaluate(() => JSON.parse(localStorage.elsen_badges));
+  assert.deepEqual(Object.keys(b.r).sort(), ['21', '7']);
+  assert.ok(await page.isHidden('#bpop'));
+  // walking reaches 7 today → badge + pop-up
+  await page.locator('#tasks .task').nth(1).locator('.t').click();
+  await page.waitForSelector('#bpop:not([hidden])');
+  assert.equal(await page.textContent('#bpopT'), '7 хоногийн тэмдэг');
+  assert.equal(await page.textContent('#bpopS'), 'Алхах');
+  b = await page.evaluate(() => JSON.parse(localStorage.elsen_badges));
+  assert.equal(b.w['7'], '2026-11-18');
+  // unticking never takes a badge away
+  await page.locator('#tasks .task').nth(1).locator('.t').click();
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.elsen_badges).w['7']), '2026-11-18');
+  assert.ok(await page.evaluate(() => DATA_KEYS.includes('elsen_badges')));
+  // Stats: badge page and the month in words
+  await page.click('nav.tabs button[data-v="v-stat"]');
+  assert.equal(await page.locator('#badges .bh').count(), 2);
+  assert.equal(await page.locator('#badges .bh').nth(0).locator('.bdg span.on').count(), 2);
+  assert.match(await page.locator('#badges .bh').nth(0).locator('small').textContent(), /Дараагийн тэмдэг: 48\/66/);
+  assert.equal(await page.textContent('#badgeCnt'), '3 / 8');
+  const story = await page.locator('#mSum p').allTextContents();
+  assert.ok(story.length >= 3 && story.length <= 4, story.join(' | '));
+  assert.equal(story[0], 'Энэ сард «Ном унших»-д 8ц 30м зарцууллаа.');
+  assert.equal(story[1], '«Ном унших»: нийт 170 хуудас.');
+  assert.match(story.join(' '), /Шинэ тэмдэг: 3\./);
 });

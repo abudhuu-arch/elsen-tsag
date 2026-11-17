@@ -447,7 +447,21 @@ ui:{
 "Давс, тосыг багасгаарай":["Cut down on salt and fat","Omez sůl a tuk"],
 "Хоолоо тогтмол цагт идээрэй":["Eat at regular times","Jez v pravidelnou dobu"],
 "sw:Шинэчлэх":["Reset","Vynulovat"],
-"meal:Өдөр":["Midday","Poledne"]
+"meal:Өдөр":["Midday","Poledne"],
+"Тэмдэг":["Badges","Odznaky"],
+"{n} хоногийн тэмдэг":["{n}-day badge","Odznak {n} dní"],
+"Дараагийн тэмдэг: {a}/{b}":["Next badge: {a}/{b}","Další odznak: {a}/{b}"],
+"Бүх тэмдэг авсан 🎉":["All badges earned 🎉","Všechny odznaky získány 🎉"],
+"авсан {d}":["earned {d}","získán {d}"],
+"аваагүй":["not yet","zatím ne"],
+"Сарын тойм":["Month in words","Měsíc v kostce"],
+"Энэ сард «{name}»-д {d} зарцууллаа.":["This month you spent {d} on “{name}”.","Tento měsíc jsi věnoval(a) {d} návyku „{name}“."],
+"«{name}»: нийт {v} {unit}.":["“{name}”: {v} {unit} in total.","„{name}“: celkem {v} {unit}."],
+"{n} өдөр бүх дадлаа биелүүлж, хамгийн урт дараалал {b} өдөр боллоо.":["{n} day with every habit done; longest streak {b} days.|{n} days with every habit done; longest streak {b} days.","{n} den se všemi návyky splněnými, nejdelší řada {b} dní.|{n} dny se všemi návyky splněnými, nejdelší řada {b} dní.|{n} dní se všemi návyky splněnými, nejdelší řada {b} dní."],
+"Хамгийн тогтвортой дадал: «{name}» ({p}%).":["Steadiest habit: “{name}” ({p}%).","Nejstálejší návyk: „{name}“ ({p} %)."],
+"Шинэ тэмдэг: {n}.":["New badges: {n}.","Nové odznaky: {n}."],
+"Дундаж биелэлт өмнөх сараас {d}% өслөө.":["Average completion rose {d}% from last month.","Průměrné plnění vzrostlo oproti minulému měsíci o {d} %."],
+"Дундаж биелэлт өмнөх сараас {d}% буурлаа.":["Average completion fell {d}% from last month.","Průměrné plnění kleslo oproti minulému měsíci o {d} %."]
 },
 lessons:[
 ["p","Дуслыг хураавал далай, дуулсныг хураавал эрдэм.","Gather drops and you get a sea; gather what you hear and you get wisdom.","Sbírej kapky a vznikne moře, sbírej, co slyšíš, a vznikne moudrost."],

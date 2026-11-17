@@ -412,7 +412,29 @@ input[type=time]::-webkit-date-and-time-value{text-align:left}
 .onbpick .li[aria-disabled=true]{opacity:.45}
 .onbnav{margin-top:18px;position:sticky;bottom:0;padding:12px 0 4px;background:linear-gradient(180deg,rgba(15,13,11,0),var(--bg) 35%)}
 .onbskip{background:none;border:none;color:var(--dim);font:inherit;font-size:13px;margin-top:12px;padding:8px;cursor:pointer;text-decoration:underline}
-.libbtns{margin-top:10px}.libbtns .btn{font-size:13px;padding:11px 8px}
+.libbtns{margin-top:10px}
+.msum{font-size:14px;line-height:1.6;color:var(--ink)}
+.msum h3{font-family:"Cormorant Garamond",serif;font-size:19px;color:var(--sand3);margin-bottom:6px}
+.msum p+p{margin-top:4px}
+.bh{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.bh:first-child{border-top:none;padding-top:0}
+.bh .nm{flex:1;min-width:0;font-size:14px}
+.bh .nm small{display:block;color:var(--dim);font-size:11px;margin-top:2px}
+.bdg{display:flex;gap:6px}
+.bdg span{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-size:18px;background:var(--bg2);border:1px solid var(--line);position:relative}
+.bdg span i{position:absolute;bottom:-6px;font-style:normal;font-size:9px;color:var(--dim);background:var(--card);padding:0 3px;border-radius:4px}
+.bdg span.off{filter:grayscale(1);opacity:.28}
+.bdg span.on{border-color:var(--sand);box-shadow:0 0 0 2px rgba(227,178,107,.15)}
+.bpop{position:fixed;left:50%;top:calc(18px + env(safe-area-inset-top));transform:translateX(-50%);z-index:40;display:flex;align-items:center;gap:12px;
+  background:linear-gradient(180deg,#2f2418,#1d1712);border:1px solid var(--sand2);border-radius:18px;padding:12px 18px 12px 14px;box-shadow:0 12px 40px rgba(0,0,0,.5);max-width:calc(100% - 32px)}
+.bpop .bi{font-size:34px;line-height:1}
+.bpop .bt{display:flex;flex-direction:column;font-size:13px;color:var(--mute)}
+.bpop .bt b{color:var(--sand3);font-size:15px}
+.bpop.go{animation:bpop 3.6s ease both}
+.bpop.go .bi{animation:bspin .9s cubic-bezier(.2,1.4,.4,1) both}
+@keyframes bpop{0%{opacity:0;transform:translate(-50%,-30px) scale(.8)}12%{opacity:1;transform:translate(-50%,0) scale(1.04)}18%{transform:translate(-50%,0) scale(1)}85%{opacity:1;transform:translate(-50%,0)}100%{opacity:0;transform:translate(-50%,-12px)}}
+@keyframes bspin{0%{transform:scale(.2) rotate(-90deg)}100%{transform:none}}
+@media (prefers-reduced-motion:reduce){.bpop.go,.bpop.go .bi{animation:none}}.libbtns .btn{font-size:13px;padding:11px 8px}
 .tabseg{display:flex;gap:6px;margin-bottom:12px}
 .tabseg button{flex:1;background:var(--card);border:1px solid var(--line);color:var(--mute);border-radius:10px;padding:9px 6px;font:inherit;font-size:13px;cursor:pointer}
 .tabseg button.on{border-color:var(--sand);color:var(--sand)}
@@ -602,6 +624,7 @@ input[type=time]::-webkit-date-and-time-value{text-align:left}
     </div>
     <div class="tiles" id="tiles"></div>
     <div class="insight" id="insight" hidden></div>
+    <div class="card msum" id="mSum" hidden></div>
     <section>
       <div class="sh"><h2>7 хоногийн тайлан</h2>
         <div class="wknav"><button id="wkPrev" aria-label="Өмнөх 7 хоног">‹</button><button id="wkNext" aria-label="Дараагийн 7 хоног">›</button></div></div>
@@ -623,6 +646,10 @@ input[type=time]::-webkit-date-and-time-value{text-align:left}
     <section>
       <div class="sh"><h2>Дадал тус бүр</h2></div>
       <div class="card" id="perTask"></div>
+    </section>
+    <section id="badgeSec" hidden>
+      <div class="sh"><h2>Тэмдэг</h2><div class="count" id="badgeCnt"></div></div>
+      <div class="card" id="badges"></div>
     </section>
   </div>
 
@@ -728,6 +755,8 @@ input[type=time]::-webkit-date-and-time-value{text-align:left}
     <button class="btn" id="libClose">Хаах</button>
   </div>
 </div>
+
+<div class="bpop" id="bpop" role="status" aria-live="polite" hidden><div class="bi" id="bpopI"></div><div class="bt"><b id="bpopT"></b><span id="bpopS"></span></div></div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"><span id="toastMsg"></span><button id="toastBtn" hidden></button><button id="toastX" class="tx" aria-label="Хаах" hidden>×</button></div>
 
@@ -1199,7 +1228,7 @@ function renderTasks(){
   if(typeof renderReview==="function") renderReview();
   if(typeof renderSleep==="function") renderSleep();
   if(typeof renderWeekDay==="function") renderWeekDay();
-  if(window.chalReady){renderLesson(); renderChal()}            // set once the challenge data below has loaded
+  if(window.chalReady){renderLesson(); renderChal(); if(window.badgesReady) checkBadges()}            // set once the challenge data below has loaded
 }
 /* ---------- amounts logged on tasks (km run, pages read, reps…) ---------- */
 let qty=store.get("elsen_qty",{});
@@ -2040,6 +2069,7 @@ function renderStats(){
     if(ranked[n-2].p-lo.p>=0.05) parts.push(`<span>🌱 ${T("Анхаарах")}: <b>${WD_FULL[lo.i]}</b> ${Math.round(lo.p*100)}%</span>`);
   }
   ins.innerHTML=parts.join(""); ins.hidden=!parts.length;
+  renderMonthStory(y,m,counted,full,best,avg,prev);
 
   // calendar heatmap (weeks start on Monday)
   const cal=$("cal"); cal.innerHTML="";
@@ -2078,7 +2108,7 @@ function renderStats(){
   // mark the selected day (statSel may have been defaulted above)
   cal.querySelectorAll("button").forEach((b,i)=>{const x=days[i]; if(x) b.classList.toggle("sel",x.on&&x.k===statSel)});
 
-  renderMore(counted,today); renderWeekStat();
+  renderMore(counted,today); renderWeekStat(); renderBadges();
   // per task
   const pt=$("perTask"); pt.innerHTML="";
   if(!counted.length){pt.innerHTML=`<div class="empty">${T("Энэ сард бүртгэл алга")}</div>`; return}
@@ -2478,7 +2508,7 @@ $("installBtn").onclick=async()=>{if(!installEvt)return;installEvt.prompt();try{
 renderInstall();
 
 /* ---------- backup: everything lives only on this phone, so let people keep a copy ---------- */
-const DATA_KEYS=["elsen_cfg","elsen_hist","elsen_tm","elsen_snap","elsen_sw","elsen_pantry","elsen_foodcfg","elsen_plan","elsen_water","elsen_qty","elsen_review","elsen_sleep","elsen_rest","elsen_chal"];
+const DATA_KEYS=["elsen_cfg","elsen_hist","elsen_tm","elsen_snap","elsen_sw","elsen_pantry","elsen_foodcfg","elsen_plan","elsen_water","elsen_qty","elsen_review","elsen_sleep","elsen_rest","elsen_chal","elsen_badges"];
 function backupData(){
   const data={};
   DATA_KEYS.forEach(k=>{try{const v=localStorage.getItem(k); if(v!=null) data[k]=JSON.parse(v)}catch(e){}});
@@ -2718,6 +2748,87 @@ function renderChal(){
   card.append(row,dots,foot);
 }
 window.chalReady=true;
+
+/* ---------- badges: 7, 21, 66, 100 in a row, per habit; once earned, kept for good ---------- */
+const BADGES=[[7,"🌱"],[21,"🔥"],[66,"🏅"],[100,"🏆"]];
+let badges=store.get("elsen_badges",{});                    // {habitId:{7:"YYYY-MM-DD",…}}
+if(!isObj(badges)) badges={};
+for(const id in badges){ if(!isObj(badges[id])){delete badges[id];continue}
+  for(const n in badges[id]) if(!BADGES.some(b=>String(b[0])===n)||!isKey(badges[id][n])) delete badges[id][n] }
+// Streaks from before badges existed: earn them quietly, once.
+if(!store.get("elsen_badges_init",false)){
+  const k=dayKey(new Date());
+  [...cfg.tasks,...cfg.archive].forEach(t=>{const b=bestStreakOf(t); BADGES.forEach(([n])=>{if(b>=n) (badges[t.id]=badges[t.id]||{})[n]=badges[t.id]?.[n]||k})});
+  store.set("elsen_badges",badges); store.set("elsen_badges_init",true);
+}
+const badgeName=n=>T("{n} хоногийн тэмдэг",{n});
+let bpopQ=[], bpopOn=false;
+function checkBadges(){
+  const k=dayKey(new Date()), fresh=[];
+  cfg.tasks.forEach(t=>{const s=streakOf(t,k); BADGES.forEach(([n,ic])=>{
+    if(s>=n&&!(badges[t.id]||{})[n]){(badges[t.id]=badges[t.id]||{})[n]=k; fresh.push({t,n,ic})}})});
+  if(!fresh.length) return;
+  store.set("elsen_badges",badges);
+  fresh.forEach(f=>bpopQ.push(f)); showBadgePop();
+}
+function showBadgePop(){
+  if(bpopOn||!bpopQ.length) return;
+  const {t,n,ic}=bpopQ.shift(), el=$("bpop"); bpopOn=true;
+  $("bpopI").textContent=ic; $("bpopT").textContent=badgeName(n); $("bpopS").textContent=t.name;
+  el.hidden=false; el.classList.remove("go"); void el.offsetWidth; el.classList.add("go");
+  if(typeof unlockAudio==="function"){unlockAudio(); chime()} buzz([40,60,40,60,120]);
+  setTimeout(()=>{el.hidden=true; el.classList.remove("go"); bpopOn=false; showBadgePop()},REDUCED?2500:3700);
+}
+function renderBadges(){
+  const list=[...cfg.tasks,...cfg.archive.filter(a=>badges[a.id])], box=$("badges"); box.innerHTML="";
+  $("badgeSec").hidden=!list.length;
+  let got=0;
+  list.forEach(t=>{
+    const e=badges[t.id]||{}, cur=t.archived?0:streakOf(t,dayKey(new Date())), next=BADGES.find(([n])=>!e[n]);
+    const r=document.createElement("div"); r.className="bh";
+    r.innerHTML=`<div class="nm"><span></span><small></small></div><div class="bdg"></div>`;
+    r.querySelector(".nm span").textContent=t.name+(t.archived?" · "+T("архив"):"");
+    r.querySelector(".nm small").textContent=next?T("Дараагийн тэмдэг: {a}/{b}",{a:Math.min(cur,next[0]),b:next[0]}):T("Бүх тэмдэг авсан 🎉");
+    const g=r.querySelector(".bdg");
+    BADGES.forEach(([n,ic])=>{const on=!!e[n]; if(on) got++;
+      const b=document.createElement("span"); b.className=on?"on":"off"; b.textContent=ic;
+      const i=document.createElement("i"); i.textContent=n; b.appendChild(i);
+      b.setAttribute("role","img"); b.setAttribute("aria-label",badgeName(n)+": "+(on?T("авсан {d}",{d:e[n]}):T("аваагүй")));
+      b.title=b.getAttribute("aria-label"); g.appendChild(b)});
+    box.appendChild(r);
+  });
+  $("badgeCnt").textContent=`${got} / ${list.length*BADGES.length}`;
+}
+
+window.badgesReady=true;
+
+/* ---------- month in words: 3–4 sentences ---------- */
+function monthStory(y,m,counted,full,best,avg,prevAvg){
+  const out=[], hab=[...cfg.tasks,...cfg.archive], ks=counted.map(x=>x.k);
+  // time: the habit with the most minutes
+  const mins=hab.map(t=>({t,v:ks.reduce((a,k)=>{const s=(tm[k]||{})[t.id]; return a+(s?tmSpent(s)/60000:0)},0)})).sort((a,b)=>b.v-a.v)[0];
+  if(mins&&mins.v>=30) out.push(T("Энэ сард «{name}»-д {d} зарцууллаа.",{name:mins.t.name,d:fmtDur(mins.v)}));
+  // amounts: the biggest logged total
+  const q=hab.filter(t=>t.unit).map(t=>({t,v:ks.reduce((a,k)=>a+((qty[k]||{})[t.id]||0),0)})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v)[0];
+  if(q) out.push(T("«{name}»: нийт {v} {unit}.",{name:q.t.name,v:fmtQ(q.v),unit:q.t.unit}));
+  // days
+  if(full) out.push(T("{n} өдөр бүх дадлаа биелүүлж, хамгийн урт дараалал {b} өдөр боллоо.",{n:full,b:best}));
+  // badges this month
+  const pre=`${y}-${pad(m+1)}`; let nb=0; for(const id in badges) for(const n in badges[id]) if(badges[id][n].startsWith(pre)) nb++;
+  if(nb) out.push(T("Шинэ тэмдэг: {n}.",{n:nb}));
+  // the steadiest habit
+  const steady=hab.map(t=>{let h=0,d=0; ks.forEach(k=>{if(idsOn(k).includes(t.id)){h++; if(doneOn(t,k)) d++}}); return {t,h,p:h?d/h:0}})
+    .filter(x=>x.h>=5).sort((a,b)=>b.p-a.p||b.h-a.h)[0];
+  if(steady&&steady.p>0) out.push(T("Хамгийн тогтвортой дадал: «{name}» ({p}%).",{name:steady.t.name,p:Math.round(steady.p*100)}));
+  if(prevAvg!=null&&out.length<4){const d=avg-prevAvg; if(Math.abs(d)>=5) out.push(T(d>0?"Дундаж биелэлт өмнөх сараас {d}% өслөө.":"Дундаж биелэлт өмнөх сараас {d}% буурлаа.",{d:Math.abs(d)}))}
+  return out.slice(0,4);
+}
+function renderMonthStory(y,m,counted,full,best,avg,prev){
+  const box=$("mSum"), lines=counted.length?monthStory(y,m,counted,full,best,avg,prev.counted.length>=7?prev.avg:null):[];
+  box.hidden=!lines.length; if(!lines.length) return;
+  box.innerHTML=`<h3>${T("Сарын тойм")}</h3>`;
+  lines.forEach(l=>{const p=document.createElement("p"); p.textContent=l; box.appendChild(p)});
+}
 
 /* ---------- welcome screens (first start only) ----------
    1 welcome + language · 2 what to learn (categories) · 3 pick 1–3 habits · 4 sleep and work hours.
