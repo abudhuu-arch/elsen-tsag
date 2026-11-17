@@ -109,6 +109,9 @@ h2{font-family:"Cormorant Garamond",serif;font-size:24px;font-weight:600;color:v
 .task .tx{flex:1;min-width:0}
 .task .st{font-size:12px;color:var(--mute);margin-top:3px}
 .task.off{opacity:.55}
+.task.rest .box{border-color:var(--sleep);background:rgba(91,111,168,.15)}
+.rbtn{background:none;border:1px solid var(--line);color:var(--mute);border-radius:8px;font:inherit;font-size:11px;padding:2px 7px;cursor:pointer;vertical-align:1px}
+.rbtn.on{border-color:var(--sleep);color:#aab6dd}
 .pw{display:flex;align-items:center;gap:8px;margin-top:6px}
 .pw .path{flex:1;max-width:160px;height:3px;background:var(--bg2);border-radius:2px;overflow:hidden}
 .pw .path i{display:block;height:100%;background:linear-gradient(90deg,var(--sand2),var(--sand));border-radius:2px}
@@ -1005,12 +1008,21 @@ function renderTasks(){
   if((snap[k]||[]).join()!==ids.join()){snap[k]=ids; store.set("elsen_snap",snap)}
   cfg.tasks.forEach(t=>{
     const el=document.createElement("div");
-    el.className="task"+(done[t.id]?" done":"")+(isDue(t,k)?"":" off"); el.dataset.id=t.id;
+    el.className="task"+(done[t.id]?" done":"")+(isDue(t,k)?"":" off")+(!done[t.id]&&restPicked(t,k)?" rest":""); el.dataset.id=t.id;
     el.tabIndex=0; el.setAttribute("role","checkbox"); el.setAttribute("aria-checked",done[t.id]?"true":"false");
     el.onkeydown=e=>{if(e.target===el&&(e.key===" "||e.key==="Enter")){e.preventDefault();el.click()}};
     el.innerHTML=`<div class="box"></div><div class="tx"><div class="t"></div><div class="st"></div><div class="pw"><div class="path"><i></i></div><span></span></div><div class="tp" hidden><i></i></div></div><div class="tm"></div>`;
     el.querySelector(".t").textContent=t.name;
-    const st=habitLine(t,k); el.querySelector(".st").textContent=st; el.querySelector(".st").hidden=!st;
+    const st=habitLine(t,k), stEl=el.querySelector(".st"); stEl.textContent=st;
+    { const picked=!done[t.id]&&restPicked(t,k), used=monthRests(t,k).length;
+      if(picked||(!done[t.id]&&isDue(t,k)&&used<REST_MONTH&&streakOf(t,k)>0)){      // only when there is a streak to keep
+        const rb=document.createElement("button"); rb.className="rbtn"+(picked?" on":"");
+        rb.textContent=picked?"Буцаах":`☾ Амрах ${REST_MONTH-used}/${REST_MONTH}`;
+        rb.setAttribute("aria-label",picked?`Амралтыг цуцлах: ${t.name}`:`Өнөөдөр амрах: ${t.name}. Энэ сард ${REST_MONTH-used} удаа үлдсэн, дараалал тасрахгүй`);
+        rb.onclick=e=>{e.stopPropagation(); setRest(t,k,!picked); buzz(12); renderTasks(); renderWeek()};
+        if(st) stEl.append(" · "); stEl.appendChild(rb);
+      } }
+    stEl.hidden=!stEl.childNodes.length;
     { const d=pathDay(t,k), pw=el.querySelector(".pw"), fin=d>=PATH;
       pw.classList.toggle("fin",fin); pw.querySelector("i").style.width=Math.min(100,d/PATH*100)+"%";
       pw.querySelector("span").textContent=fin?"66 ✓":`${d}/${PATH}`;
@@ -1032,7 +1044,7 @@ function renderTasks(){
       if(wl){ $("wPlus").click(); return }                 // water task: a tap is one more cup; it ticks itself at the goal
       const d=todayDone();
       if(d[t.id]) delete d[t.id];
-      else { buzz(15); d[t.id]=hhmm(new Date()); const s=(tm[k]||{})[t.id]; if(s&&s.run){s.acc+=Date.now()-s.run;s.run=null;saveTm();updateWakeLock()} }
+      else { buzz(15); d[t.id]=hhmm(new Date()); if(restPicked(t,k)) setRest(t,k,false); const s=(tm[k]||{})[t.id]; if(s&&s.run){s.acc+=Date.now()-s.run;s.run=null;saveTm();updateWakeLock()} }
       store.set("elsen_hist",hist); renderTasks(); renderWeek();
       const again=$("tasks").querySelector(`[data-id="${t.id}"]`); if(again&&document.activeElement===document.body) again.focus({preventScroll:true});
     };
@@ -1190,6 +1202,27 @@ function scoreFor(k){const ids=idsOn(k), d=hist[k]||{};return{c:ids.filter(id=>d
 /* ---------- habits: frequency and streaks ---------- */
 // Habits from before frequencies existed have no start date: they count from the first day the app was used.
 const startOf=t=>t.start||firstUseKey();
+// Rest days: {dayKey:[habit id]}. Up to REST_MONTH a month per habit: days the person chose, then, in date order,
+// missed due days (forgotten, app not opened) are covered too, so a streak survives them.
+let rest=store.get("elsen_rest",{});
+if(!isObj(rest)) rest={};
+for(const k in rest){ if(!isKey(k)||!Array.isArray(rest[k])){delete rest[k];continue} rest[k]=rest[k].map(String) }
+const REST_MONTH=2;
+const restPicked=(t,k)=>(rest[k]||[]).includes(t.id);
+function monthRests(t,k){
+  const today=dayKey(new Date()), st=startOf(t), out=[];
+  for(let x=k.slice(0,8)+"01";x.slice(0,7)===k.slice(0,7)&&x<=today&&out.length<REST_MONTH;x=addDays(x,1)){
+    if(x<st||doneOn(t,x)) continue;
+    if(restPicked(t,x)||(x<today&&fixedDue(t,x))) out.push(x);
+  }
+  return out;
+}
+const rested=(t,k)=>!doneOn(t,k)&&monthRests(t,k).includes(k);
+function setRest(t,k,on){
+  const a=(rest[k]||[]).filter(id=>id!==t.id); if(on) a.push(t.id);
+  if(a.length) rest[k]=a; else delete rest[k];
+  store.set("elsen_rest",rest);
+}
 const doneOn=(t,k)=>!!(hist[k]||{})[t.id];
 // A fixed day: every day, or one of the chosen weekdays. "N a week" habits have no fixed days.
 function fixedDue(t,k){
@@ -1200,12 +1233,12 @@ function fixedDue(t,k){
 function weekDone(t,k){let c=0; for(let x=mondayOf(k);x<=addDays(mondayOf(k),6);x=addDays(x,1)) if(doneOn(t,x)) c++; return c}
 // Still to do today? Fixed day, or an "N a week" habit whose week isn't complete yet (done today counts too).
 function isDue(t,k){
-  if(k<startOf(t)) return false;
+  if(k<startOf(t)||(!doneOn(t,k)&&restPicked(t,k))) return false;
   if((t.freq||{}).t==="week") return doneOn(t,k)||weekDone(t,k)<t.freq.n;
   return fixedDue(t,k);
 }
 // In the day's score: its fixed days, plus any day it was done (an extra day, or an "N a week" habit).
-const countsOn=(t,k)=>fixedDue(t,k)||(k>=startOf(t)&&doneOn(t,k));
+const countsOn=(t,k)=>doneOn(t,k)?k>=startOf(t):fixedDue(t,k)&&!restPicked(t,k);
 // Days in a row (for "N a week": times done in a row of complete weeks). Days that aren't due never break it;
 // today doesn't break it before the day is over.
 function streakOf(t,today){
@@ -1213,14 +1246,15 @@ function streakOf(t,today){
   if((t.freq||{}).t==="week"){
     for(let mon=mondayOf(today),first=true;mon>=mondayOf(st);mon=addDays(mon,-7),first=false){
       let c=0,avail=0;
-      for(let i=0;i<7;i++){const k=addDays(mon,i); if(k>today||k<st) continue; avail++; if(doneOn(t,k)) c++}
-      if(first||c>=Math.min(t.freq.n,avail)) s+=c; else break;
+      let r=0;
+      for(let i=0;i<7;i++){const k=addDays(mon,i); if(k>today||k<st) continue; avail++; if(doneOn(t,k)) c++; else if(restPicked(t,k)&&rested(t,k)) r++}
+      if(first||c+r>=Math.min(t.freq.n,avail)) s+=c; else break;
     }
     return s;
   }
   for(let k=today;k>=st;k=addDays(k,-1)){
     if(doneOn(t,k)){s++; continue}
-    if(k===today||!fixedDue(t,k)) continue;
+    if(k===today||!fixedDue(t,k)||rested(t,k)) continue;
     break;
   }
   return s;
@@ -1236,6 +1270,7 @@ const pathDay=(t,k)=>daysBetween(startOf(t),k)+1;
 function habitLine(t,k){
   const s=streakOf(t,k), wk=(t.freq||{}).t==="week", p=[];
   if(s>0) p.push(doneOn(t,k)?`🔥 ${s} ${ordSuf(s)} ${wk?"удаа":"өдөр"}`:`🔥 ${s} ${wk?"удаа":"өдөр"} дараалан`);
+  if(!doneOn(t,k)&&restPicked(t,k)) p.push("☾ Амралтын өдөр");
   if(wk) p.push(`7 хоногт ${weekDone(t,k)}/${t.freq.n}`);
   else if((t.freq||{}).t==="days") p.push(fixedDue(t,k)?freqText(t.freq):`Өнөөдөр биш · ${freqText(t.freq)}`);
   return p.join(" · ");
@@ -1378,7 +1413,8 @@ function renderWeek(){
     const d=new Date(base);d.setDate(base.getDate()-i);
     const k=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
     const {c,tot}=scoreFor(k);
-    if(tot&&c===tot) s++; else if(i===0) continue; else if(!tot&&k>=firstUseKey()) continue; else break;
+    const ok=tot&&idsOn(k).every(id=>{const t=taskById(id); return (hist[k]||{})[id]||(t&&rested(t,k))});
+    if(tot&&c===tot) s++; else if(i===0) continue; else if(!tot&&k>=firstUseKey()) continue; else if(ok) continue; else break;
   }
   $("streak").innerHTML = s ? `Тасралтгүй <b>${s}</b> өдөр бүгдийг биелүүлсэн` : `Өнөөдрөөс эхлээд дараалал үүсгээрэй`;
 }
@@ -2208,7 +2244,7 @@ $("installBtn").onclick=async()=>{if(!installEvt)return;installEvt.prompt();try{
 renderInstall();
 
 /* ---------- backup: everything lives only on this phone, so let people keep a copy ---------- */
-const DATA_KEYS=["elsen_cfg","elsen_hist","elsen_tm","elsen_snap","elsen_sw","elsen_pantry","elsen_foodcfg","elsen_plan","elsen_water","elsen_qty","elsen_review","elsen_sleep"];
+const DATA_KEYS=["elsen_cfg","elsen_hist","elsen_tm","elsen_snap","elsen_sw","elsen_pantry","elsen_foodcfg","elsen_plan","elsen_water","elsen_qty","elsen_review","elsen_sleep","elsen_rest"];
 function backupData(){
   const data={};
   DATA_KEYS.forEach(k=>{try{const v=localStorage.getItem(k); if(v!=null) data[k]=JSON.parse(v)}catch(e){}});

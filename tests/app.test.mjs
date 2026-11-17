@@ -526,7 +526,8 @@ test('habits: own streak per habit, frequency (daily / N a week / weekdays), day
   add(K('11-04'), 's'); add(K('11-06'), 's'); add(K('11-10'), 's'); add(K('11-14'), 's'); add(K('11-17'), 's');
   const { page } = await open(t, `()=>{localStorage.elsen_cfg=${JSON.stringify(JSON.stringify(cfg))};localStorage.elsen_hist=${JSON.stringify(JSON.stringify(hist))}}`,
     { time: new Date(2026, 10, 18, 12, 0) });
-  const line = i => page.locator('#tasks .task').nth(i).locator('.st').textContent();
+  // the habit's line without its rest button
+  const line = i => page.locator('#tasks .task').nth(i).locator('.st').evaluate(e => [...e.childNodes].filter(n => n.nodeName !== 'BUTTON').map(n => n.textContent).join('').replace(/ · $/, ''));
   assert.equal(await line(0), '🔥 17 өдөр дараалан');                 // today not done yet: doesn't break it
   assert.match(await line(1), /^🔥 4 өдөр дараалан · Да·Лх·Ба$/);      // Tue/Thu/Sat/Sun are not run days
   assert.equal(await line(2), '🔥 5 удаа дараалан · 7 хоногт 1/2');    // weeks of 2+ in a row, this week still open
@@ -537,7 +538,7 @@ test('habits: own streak per habit, frequency (daily / N a week / weekdays), day
   assert.equal(await pw.getAttribute('aria-label'), '66 хоногийн замын 49 дэх өдөр');
   assert.equal(Math.round(parseFloat(await pw.locator('i').evaluate(e => e.style.width))), 74);
     // tick reading: it becomes "18 дахь өдөр"
-  await page.locator('#tasks .task').nth(0).click();
+  await page.locator('#tasks .task').nth(0).locator('.t').click();
   assert.equal(await line(0), '🔥 18 дахь өдөр');
   // the day's score: fixed habits due today; "2 a week" counts only on a day it's done
   assert.equal(await page.textContent('#tot'), '3');
@@ -548,7 +549,7 @@ test('habits: own streak per habit, frequency (daily / N a week / weekdays), day
   assert.match(await run.getAttribute('class'), /\boff\b/);
   assert.match(await line(1), /Өнөөдөр биш · Да·Лх·Ба/);
   assert.equal(await page.textContent('#tot'), '2');
-  await run.click();
+  await run.locator('.t').click();
   assert.equal(await page.textContent('#tot'), '3');                  // done on an extra day → counts that day
   // Settings: frequency editor saves weekdays and "N a week"
   await page.click('#openSet');
@@ -572,4 +573,39 @@ test('66-day path: finished habits show it, a new habit starts at day 1', async 
   await page.locator('#editList input.nm').last().fill('Шинэ дадал'); await page.click('#save');
   assert.equal(await page.locator('#tasks .task').nth(1).locator('.pw span').textContent(), '1/66');
   assert.equal(await page.evaluate(() => cfg.tasks[1].start), '2026-11-18');
+});
+
+test('rest days: two a month per habit keep the streak; chosen with a button or covering a missed day', async t => {
+  // Wednesday 18 Nov. Reading done 1–17 Nov except 10 and 12 (missed: covered by the 2 rests of November).
+  const cfg = { dayStart: '00:00', sleepS: '23:00', sleepE: '07:00', workS: '09:00', workE: '18:00', v: 2,
+    tasks: [{ id: 'r', name: 'Ном унших', start: '2026-11-01' }, { id: 'j', name: 'Тэмдэглэл', start: '2026-11-01' }] };
+  const hist = {};
+  for (let d = 1; d <= 17; d++) if (d !== 10 && d !== 12) hist[`2026-11-${String(d).padStart(2, '0')}`] = { r: '08:00', j: '09:00' };
+  hist['2026-11-10'] = { j: '09:00' }; hist['2026-11-12'] = { j: '09:00' };
+  const { page } = await open(t, `()=>{localStorage.elsen_cfg=${JSON.stringify(JSON.stringify(cfg))};localStorage.elsen_hist=${JSON.stringify(JSON.stringify(hist))}}`,
+    { time: new Date(2026, 10, 18, 12, 0) });
+  const row = i => page.locator('#tasks .task').nth(i);
+  assert.match(await row(0).locator('.st').textContent(), /^🔥 15 өдөр дараалан$/);    // 2 missed days covered: no button left
+  assert.equal(await row(0).locator('.rbtn').count(), 0);
+  assert.match(await page.textContent('#streak'), /\b15\b/);                       // whole-day streak survives too (rest days don't add)
+  // journal has both rests left: rest today → out of today's count, streak kept, can be undone
+  assert.equal(await row(1).locator('.rbtn').textContent(), '☾ Амрах 2/2');
+  assert.equal(await page.textContent('#tot'), '2');
+  await row(1).locator('.rbtn').click();
+  assert.match(await row(1).getAttribute('class'), /\brest\b/);
+  assert.match(await row(1).locator('.st').textContent(), /🔥 17 өдөр дараалан · ☾ Амралтын өдөр/);
+  assert.equal(await page.textContent('#tot'), '1');
+  assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.elsen_rest)), { '2026-11-18': ['j'] });
+  assert.ok(await page.evaluate(() => DATA_KEYS.includes('elsen_rest')));          // in backups
+  // next day: the rest day didn't break the streak; one rest left this month
+  await page.clock.setFixedTime(new Date(2026, 10, 19, 12, 0)); await page.evaluate(() => tick());
+  assert.match(await row(1).locator('.st').textContent(), /^🔥 17 өдөр дараалан · ☾ Амрах 1\/2$/);
+  // a third missed day in the month breaks it: miss the 19th and 20th, look on the 21st
+  await page.clock.setFixedTime(new Date(2026, 10, 21, 12, 0)); await page.evaluate(() => tick());
+  assert.doesNotMatch(await row(1).locator('.st').textContent(), /🔥/);
+  // ticking a habit on a picked rest day clears the rest
+  await row(1).locator('.rbtn').click().catch(() => {});
+  await page.evaluate(() => { setRest(cfg.tasks[0], dayKey(new Date()), true); renderTasks(); });
+  await row(0).locator('.t').click();
+  assert.equal(await page.evaluate(() => restPicked(cfg.tasks[0], dayKey(new Date()))), false);
 });
