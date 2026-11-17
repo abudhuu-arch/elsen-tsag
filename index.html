@@ -121,6 +121,11 @@ h2{font-family:"Cormorant Garamond",serif;font-size:24px;font-weight:600;color:v
 .task.off .box{border-style:dashed}
 .fq{display:flex;align-items:center;gap:6px;flex-wrap:wrap;width:100%}
 .fq select{background:var(--bg2);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:7px 8px;font:inherit;font-size:14px;color-scheme:dark}
+.fq>span{font-size:13px;color:var(--mute)}
+.opts input:disabled{opacity:.45}
+.fq input.dn{width:52px}
+.fq input.du{width:70px}
+.fq input{background:var(--bg2);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:7px 8px;font:inherit;font-size:14px}
 .fq .wdb{width:34px;height:32px;border-radius:9px;border:1px solid var(--line);background:var(--bg2);color:var(--mute);font:inherit;font-size:12px;cursor:pointer}
 .fq .wdb.on{background:var(--sand);border-color:var(--sand);color:#2a1d0c}
 .tp{height:3px;background:var(--bg2);border-radius:2px;overflow:hidden;margin-top:7px}
@@ -691,6 +696,13 @@ function normFreq(f){
   if(isObj(f)&&f.t==="days"&&Array.isArray(f.d)){const d=[...new Set(f.d.map(Number).filter(x=>Number.isInteger(x)&&x>=0&&x<=6))].sort((a,b)=>a-b); if(d.length&&d.length<7) return {t:"days",d}}
   return {t:"daily"};
 }
+// Start small: {from, to, step, unit, since}. The amount goes up by `step` every 7 days from `since`, up to `to`.
+function normDose(d){
+  if(!isObj(d)) return null;
+  const n=x=>Math.round(+x*100)/100, from=n(d.from), to=n(d.to), step=Math.abs(n(d.step))||0;
+  if(!(from>0&&from<=1e4&&to>0&&to<=1e4)) return null;
+  return {from,to,step,unit:typeof d.unit==="string"&&d.unit.trim()?d.unit.trim().slice(0,12):"мин",...(isKey(d.since)?{since:d.since}:{})};
+}
 ["dayStart","sleepS","sleepE","workS","workE"].forEach(k=>{if(!isHM(cfg[k]))cfg[k]=DEFAULT[k]});
 if(!Array.isArray(cfg.tasks)) cfg.tasks=DEFAULT.tasks;
 cfg.sandSound=cfg.sandSound===true;          // off unless turned on
@@ -710,7 +722,7 @@ cfg.tasks=cfg.tasks.filter(t=>isObj(t)&&t.id!=null&&typeof t.name==="string").ma
   const min=typeof t.min==="number"&&isFinite(t.min)?Math.max(0,Math.min(600,Math.round(t.min))):(m?Math.min(600,+m[1]):0);
   // ...t first: fields this version doesn't know (from a newer version or a backup) are kept, never dropped
   return {...t,id:String(t.id),name:t.name,min,rem:isHM(t.rem)?t.rem:"",unit:typeof t.unit==="string"?t.unit.trim().slice(0,12):"",link:t.link==="water"?"water":"",
-    freq:normFreq(t.freq),...(isKey(t.start)?{start:t.start}:{})};
+    freq:normFreq(t.freq),dose:normDose(t.dose),...(isKey(t.start)?{start:t.start}:{})};
 });
 // Habits removed in Settings are kept here (with their history), so stats and old days still know them.
 cfg.archive=Array.isArray(cfg.archive)?cfg.archive.filter(t=>isObj(t)&&t.id!=null&&typeof t.name==="string").map(t=>({...t,id:String(t.id)})):[];
@@ -1263,6 +1275,15 @@ function streakOf(t,today){
 function ordSuf(n){const u=n%10, d=Math.floor(n/10)%10; const w=u||d; return (w===1&&u)||w===4||w===9?"дэх":"дахь"}
 const WD_MON=["Да","Мя","Лх","Пү","Ба","Бя","Ня"];          // Monday first
 const freqText=f=>!f||f.t==="daily"?"Өдөр бүр":f.t==="week"?`7 хоногт ${f.n} удаа`:[1,2,3,4,5,6,0].filter(x=>f.d.includes(x)).map(x=>WD_MON[(x+6)%7]).join("·");
+// Today's amount of a "start small" habit; minutes also set its timer.
+function doseNow(t,k){
+  const d=t.dose; if(!d) return 0;
+  const wk=Math.max(0,Math.floor(daysBetween(d.since||startOf(t),k)/7)), dir=d.to>=d.from?1:-1;
+  const v=d.from+dir*d.step*wk;
+  return Math.round((dir>0?Math.min(d.to,v):Math.max(d.to,v))*100)/100;
+}
+const isMinUnit=u=>/^(мин|минут|min)$/i.test(u||"");
+function applyDose(){const k=dayKey(new Date()); cfg.tasks.forEach(t=>{if(t.dose&&isMinUnit(t.dose.unit)) t.min=Math.min(600,Math.round(doseNow(t,k)))})}
 // 66-day path: research puts the median time for a habit to become automatic at about 66 days.
 const PATH=66;
 const pathDay=(t,k)=>daysBetween(startOf(t),k)+1;
@@ -1271,6 +1292,7 @@ function habitLine(t,k){
   const s=streakOf(t,k), wk=(t.freq||{}).t==="week", p=[];
   if(s>0) p.push(doneOn(t,k)?`🔥 ${s} ${ordSuf(s)} ${wk?"удаа":"өдөр"}`:`🔥 ${s} ${wk?"удаа":"өдөр"} дараалан`);
   if(!doneOn(t,k)&&restPicked(t,k)) p.push("☾ Амралтын өдөр");
+  if(t.dose){const v=doseNow(t,k); p.push(v===t.dose.to?`🎯 ${fmtQ(v)} ${t.dose.unit}`:`📈 ${fmtQ(v)} → ${fmtQ(t.dose.to)} ${t.dose.unit}`)}
   if(wk) p.push(`7 хоногт ${weekDone(t,k)}/${t.freq.n}`);
   else if((t.freq||{}).t==="days") p.push(fixedDue(t,k)?freqText(t.freq):`Өнөөдөр биш · ${freqText(t.freq)}`);
   return p.join(" · ");
@@ -1454,7 +1476,7 @@ function tick(){
   $("date").textContent=`${n.getFullYear()} оны ${MONTHS[n.getMonth()]}ын ${n.getDate()}, ${WD[n.getDay()]}`;
   const k=dayKey(n);
   if(k!==lastKey){ // new day: hourglass flips, list resets
-    lastKey=k; drawBar(); renderTasks(); renderWeek(); flipGlass(); store.set("elsen_seen",k);
+    lastKey=k; applyDose(); drawBar(); renderTasks(); renderWeek(); flipGlass(); store.set("elsen_seen",k);
     if(typeof renderFoodShift==="function"){renderFoodShift(); renderPlan()}
     if($("v-stat").classList.contains("on")&&typeof renderStats==="function"){statY=null; statSel=null; renderStats()}
   }
@@ -1515,6 +1537,7 @@ function renderEdit(){
     if(typeof remEditor==="function") o.appendChild(remEditor(t));
     o.appendChild(lw);
     o.appendChild(freqEditor(t));
+    o.appendChild(doseEditor(t));
     const mv=document.createElement("div"); mv.className="mv";
     [["↑",-1,"Дээш"],["↓",1,"Доош"]].forEach(([s,d,lab])=>{
       const x=document.createElement("button"); x.textContent=s; x.setAttribute("aria-label",lab+": "+(t.name||"зүйл"));
@@ -1525,6 +1548,32 @@ function renderEdit(){
     o.appendChild(mv);
     wrap.append(r,o); l.appendChild(wrap);
   });
+}
+// Start small: from → to, +step every 7 days. A changed plan counts its weeks from the day it was saved.
+function doseSaved(t){
+  const d=normDose(t.dose); if(!d) return null;
+  const old=(cfg.tasks.find(x=>x.id===t.id)||{}).dose;
+  const same=old&&old.from===d.from&&old.to===d.to&&old.step===d.step&&old.unit===d.unit;
+  return {...d,since:same&&old.since?old.since:dayKey(new Date())};
+}
+function doseEditor(t){
+  const w=document.createElement("div"); w.className="fq dose";
+  const d=t.dose||{}, nm=(t.name||"зүйл");
+  w.innerHTML=`<span>📈 Жижгээс</span>`;
+  const num=(v,lab,ph)=>{const i=document.createElement("input"); i.type="text"; i.inputMode="decimal"; i.className="dn"; i.value=v??""; i.placeholder=ph; i.setAttribute("aria-label",lab+": "+nm); return i};
+  const a=num(d.from,"Эхлэх хэмжээ","5"), b=num(d.to,"Зорилгын хэмжээ","30"), st=num(d.step,"7 хоног тутам нэмэх","5");
+  const u=document.createElement("input"); u.type="text"; u.className="du"; u.maxLength=12; u.value=d.unit||""; u.placeholder="мин"; u.setAttribute("aria-label","Хэмжих нэгж: "+nm);
+  // minutes set the timer: its own field is then read-only
+  const lockTimer=()=>{const mi=w.parentNode&&w.parentNode.querySelector("input[type=number]"); if(!mi) return;
+    const on=!!(t.dose&&isMinUnit(t.dose.unit)); mi.disabled=on; mi.title=on?"«Жижгээс»-ийн хэмжээгээр тохирно":""};
+  const sync=()=>{const p=x=>parseFloat(String(x.value).replace(",","."));
+    t.dose=a.value.trim()&&b.value.trim()?{from:p(a),to:p(b),step:st.value.trim()?p(st):0,unit:u.value.trim()||"мин"}:null; lockTimer()};
+  setTimeout(lockTimer,0);
+  [a,b,st,u].forEach(i=>i.oninput=sync);
+  const ar=document.createElement("span"); ar.textContent="→";
+  const pl=document.createElement("span"); pl.textContent="· 7 хоног тутам +";
+  w.append(a,ar,b,u,pl,st);
+  return w;
 }
 // How often: every day / N times a week / chosen weekdays
 function freqEditor(t){
@@ -1556,10 +1605,10 @@ $("save").onclick=()=>{
   shDraft.list=shDraft.list.filter(x=>x.name.trim()).map(x=>({...x,name:x.name.trim()}));
   shDraft.on=shDraft.on&&shDraft.list.length>0; shDraft.cur=Math.min(shDraft.cur,Math.max(0,shDraft.list.length-1));
   cfg.shifts=shDraft;
-  const kept=draft.filter(t=>t.name.trim()).map(t=>({...t,id:t.id,name:t.name.trim(),min:t.min||0,rem:t.rem||"",unit:(t.unit||"").trim().slice(0,12),link:t.link==="water"?"water":"",freq:normFreq(t.freq)}));
+  const kept=draft.filter(t=>t.name.trim()).map(t=>({...t,id:t.id,name:t.name.trim(),min:t.min||0,rem:t.rem||"",unit:(t.unit||"").trim().slice(0,12),link:t.link==="water"?"water":"",freq:normFreq(t.freq),dose:doseSaved(t)}));
   // a removed habit goes to the archive with its history; it is never erased
   cfg.tasks.filter(t=>!kept.some(x=>x.id===t.id)).forEach(t=>cfg.archive.push({...t,archived:dayKey(new Date())}));
-  cfg.tasks=kept;
+  cfg.tasks=kept; applyDose();
   cfg.sound=$("soundOn").checked;
   cfg.sandSound=$("sandOn").checked; if(cfg.sandSound) unlockAudio();
   {const w=parseInt($("waterGoalIn").value,10); if(w>=0&&w<=20) cfg.waterGoal=w}
@@ -2367,7 +2416,7 @@ let startView="v-day"; try{startView=sessionStorage.getItem("elsen_view")||"v-da
 // Home-screen shortcuts open a tab directly: ./?v=v-sw, ./?v=v-stat
 try{const q=new URLSearchParams(location.search).get("v"); if(q&&$(q)&&$(q).classList.contains("view")){startView=q; history.replaceState(null,"",location.pathname)}}catch(e){}
 
-drawBar(); renderTasks(); renderWeek(); tick();
+applyDose(); drawBar(); renderTasks(); renderWeek(); tick();
 // Tick right after each whole second so the clock and countdowns change in step with real time.
 // try/finally: one error inside tick() must never stop the clock.
 (function loop(){setTimeout(()=>{try{tick()}catch(e){console.warn(e)}finally{loop()}},1000-Date.now()%1000+15)})();

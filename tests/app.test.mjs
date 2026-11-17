@@ -67,7 +67,7 @@ test('old saved data migrates without losing history', async t => {
   const hist = { [keyAgo(3)]: { t1: '08:00', t5: '21:00' } };
   const { page } = await open(t, `()=>{localStorage.elsen_cfg=${JSON.stringify(JSON.stringify({ dayStart: '00:00', sleepS: '23:00', sleepE: '07:00', workS: '09:00', workE: '18:00', tasks: [{ id: 't1', name: 'Гадаад хэл' }, { id: 't5', name: 'Ном унших 30 минут' }] }))};localStorage.elsen_hist=${JSON.stringify(JSON.stringify(hist))}}`);
   const tasks = await page.evaluate(() => cfg.tasks);
-  assert.deepEqual(tasks, [{ id: 't1', name: 'Гадаад хэл', min: 0, rem: '', unit: '', link: '', freq: { t: 'daily' } }, { id: 't5', name: 'Ном унших 30 минут', min: 30, rem: '', unit: '', link: '', freq: { t: 'daily' } }]);
+  assert.deepEqual(tasks, [{ id: 't1', name: 'Гадаад хэл', min: 0, rem: '', unit: '', link: '', freq: { t: 'daily' } , dose: null }, { id: 't5', name: 'Ном унших 30 минут', min: 30, rem: '', unit: '', link: '', freq: { t: 'daily' } , dose: null }]);
   assert.deepEqual(JSON.parse(await page.evaluate(() => localStorage.elsen_hist)), hist);
   assert.deepEqual(await page.$$eval('.tbtn', b => b.map(x => x.textContent)), ['▶ 30м']);
 });
@@ -82,7 +82,7 @@ test('corrupted or hand-edited data does not break the app', async t => {
   const { page } = await open(t, `()=>{const b=${JSON.stringify(bad)};for(const k in b)localStorage.setItem(k,JSON.stringify(b[k]))}`);
   const c = await page.evaluate(() => cfg);
   assert.equal(c.dayStart, '00:00'); assert.equal(c.sleepS, '23:00');
-  assert.deepEqual(c.tasks, [{ id: 't1', name: 'Ном 20 мин', min: 20, rem: '', unit: '', link: '', freq: { t: 'daily' } }, { id: '7', name: 'Гүйх', min: 600, rem: '', unit: '', link: '', freq: { t: 'daily' } }]);
+  assert.deepEqual(c.tasks, [{ id: 't1', name: 'Ном 20 мин', min: 20, rem: '', unit: '', link: '', freq: { t: 'daily' } , dose: null }, { id: '7', name: 'Гүйх', min: 600, rem: '', unit: '', link: '', freq: { t: 'daily' } , dose: null }]);
   assert.match(await page.textContent('#clock'), /^\d\d:\d\d:\d\d$/);
   for (const v of ['v-sw', 'v-food', 'v-stat']) await page.click(`nav.tabs button[data-v="${v}"]`);
 });
@@ -554,8 +554,8 @@ test('habits: own streak per habit, frequency (daily / N a week / weekdays), day
   // Settings: frequency editor saves weekdays and "N a week"
   await page.click('#openSet');
   const box = page.locator('.editbox').nth(0);
-  await box.locator('.fq select').selectOption('week');
-  await box.locator('.fq input').fill('4');
+  await box.locator('.fq:not(.dose) select').selectOption('week');
+  await box.locator('.fq:not(.dose) input').fill('4');
   await page.locator('.editbox').nth(3).locator('.fq select').selectOption('days');
   await page.click('#save');
   const saved = await page.evaluate(() => JSON.parse(localStorage.elsen_cfg).tasks.map(x => x.freq));
@@ -608,4 +608,34 @@ test('rest days: two a month per habit keep the streak; chosen with a button or 
   await page.evaluate(() => { setRest(cfg.tasks[0], dayKey(new Date()), true); renderTasks(); });
   await row(0).locator('.t').click();
   assert.equal(await page.evaluate(() => restPicked(cfg.tasks[0], dayKey(new Date()))), false);
+});
+
+test('start small: 5 → 30 minutes, +5 every 7 days; the timer follows; changing the plan restarts its weeks', async t => {
+  const cfg = { dayStart: '00:00', sleepS: '23:00', sleepE: '07:00', workS: '09:00', workE: '18:00', v: 2,
+    tasks: [{ id: 'm', name: 'Бясалгал', dose: { from: 5, to: 30, step: 5, unit: 'мин', since: '2026-11-01' } },
+            { id: 'p', name: 'Ном', dose: { from: 10, to: 12, step: 5, unit: 'хуудас', since: '2026-10-01' } }] };
+  const { page } = await open(t, `()=>{localStorage.elsen_cfg=${JSON.stringify(JSON.stringify(cfg))}}`, { time: new Date(2026, 10, 18, 12, 0) });
+  const row = i => page.locator('#tasks .task').nth(i);
+  // 1 Nov + 17 days = week 2 → 5 + 2×5 = 15 min, and the timer is 15 min
+  assert.match(await row(0).locator('.st').textContent(), /📈 15 → 30 мин/);
+  assert.equal(await row(0).locator('.tbtn').textContent(), '▶ 15м');
+  assert.match(await row(1).locator('.st').textContent(), /🎯 12 хуудас/);           // reached the goal, never above it
+  assert.equal(await row(1).locator('.tbtn').count(), 0);
+  // a week later it grows by itself
+  await page.clock.setFixedTime(new Date(2026, 10, 22, 12, 0)); await page.evaluate(() => tick());
+  assert.equal(await row(0).locator('.tbtn').textContent(), '▶ 20м');
+  // edit in Settings: new plan counts from today; untouched plan keeps its date
+  await page.click('#openSet');
+  const box = page.locator('.editbox').nth(0);
+  assert.equal(await box.locator('input.dn').nth(0).inputValue(), '5');
+  await box.locator('input.dn').nth(1).fill('40');
+  await page.click('#save');
+  const d = await page.evaluate(() => JSON.parse(localStorage.elsen_cfg).tasks.map(x => x.dose));
+  assert.deepEqual(d[0], { from: 5, to: 40, step: 5, unit: 'мин', since: '2026-11-22' });
+  assert.equal(d[1].since, '2026-10-01');
+  assert.equal(await row(0).locator('.tbtn').textContent(), '▶ 5м');
+  // clearing the fields turns it off
+  await page.click('#openSet');
+  await box.locator('input.dn').nth(0).fill(''); await page.click('#save');
+  assert.equal(await page.evaluate(() => cfg.tasks[0].dose), null);
 });
