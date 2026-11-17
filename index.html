@@ -109,6 +109,12 @@ h2{font-family:"Cormorant Garamond",serif;font-size:24px;font-weight:600;color:v
 .task .tx{flex:1;min-width:0}
 .task .st{font-size:12px;color:var(--mute);margin-top:3px}
 .task.off{opacity:.55}
+.pw{display:flex;align-items:center;gap:8px;margin-top:6px}
+.pw .path{flex:1;max-width:160px;height:3px;background:var(--bg2);border-radius:2px;overflow:hidden}
+.pw .path i{display:block;height:100%;background:linear-gradient(90deg,var(--sand2),var(--sand));border-radius:2px}
+.pw span{font-size:10px;color:var(--dim);font-variant-numeric:tabular-nums}
+.pw.fin .path i{background:var(--ok)}
+.pw.fin span{color:var(--ok)}
 .task.off .box{border-style:dashed}
 .fq{display:flex;align-items:center;gap:6px;flex-wrap:wrap;width:100%}
 .fq select{background:var(--bg2);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:7px 8px;font:inherit;font-size:14px;color-scheme:dark}
@@ -1002,9 +1008,13 @@ function renderTasks(){
     el.className="task"+(done[t.id]?" done":"")+(isDue(t,k)?"":" off"); el.dataset.id=t.id;
     el.tabIndex=0; el.setAttribute("role","checkbox"); el.setAttribute("aria-checked",done[t.id]?"true":"false");
     el.onkeydown=e=>{if(e.target===el&&(e.key===" "||e.key==="Enter")){e.preventDefault();el.click()}};
-    el.innerHTML=`<div class="box"></div><div class="tx"><div class="t"></div><div class="st"></div><div class="tp" hidden><i></i></div></div><div class="tm"></div>`;
+    el.innerHTML=`<div class="box"></div><div class="tx"><div class="t"></div><div class="st"></div><div class="pw"><div class="path"><i></i></div><span></span></div><div class="tp" hidden><i></i></div></div><div class="tm"></div>`;
     el.querySelector(".t").textContent=t.name;
     const st=habitLine(t,k); el.querySelector(".st").textContent=st; el.querySelector(".st").hidden=!st;
+    { const d=pathDay(t,k), pw=el.querySelector(".pw"), fin=d>=PATH;
+      pw.classList.toggle("fin",fin); pw.querySelector("i").style.width=Math.min(100,d/PATH*100)+"%";
+      pw.querySelector("span").textContent=fin?"66 ✓":`${d}/${PATH}`;
+      pw.title=fin?"66 хоногийн зам дууссан":`66 хоногийн замын ${d} ${ordSuf(d)} өдөр`; pw.setAttribute("aria-label",pw.title); pw.setAttribute("role","img") }
     const wl=t.link==="water"&&cfg.waterGoal>0;
     if(wl){ el.classList.add("wlink"); el.querySelector(".tp").hidden=false;
       const n=water[k]||0; el.querySelector(".tp i").style.width=Math.min(100,n/cfg.waterGoal*100)+"%";
@@ -1219,6 +1229,9 @@ function streakOf(t,today){
 function ordSuf(n){const u=n%10, d=Math.floor(n/10)%10; const w=u||d; return (w===1&&u)||w===4||w===9?"дэх":"дахь"}
 const WD_MON=["Да","Мя","Лх","Пү","Ба","Бя","Ня"];          // Monday first
 const freqText=f=>!f||f.t==="daily"?"Өдөр бүр":f.t==="week"?`7 хоногт ${f.n} удаа`:[1,2,3,4,5,6,0].filter(x=>f.d.includes(x)).map(x=>WD_MON[(x+6)%7]).join("·");
+// 66-day path: research puts the median time for a habit to become automatic at about 66 days.
+const PATH=66;
+const pathDay=(t,k)=>daysBetween(startOf(t),k)+1;
 // The line under a habit's name: streak, and how often it is due.
 function habitLine(t,k){
   const s=streakOf(t,k), wk=(t.freq||{}).t==="week", p=[];

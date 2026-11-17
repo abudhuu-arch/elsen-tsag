@@ -531,7 +531,12 @@ test('habits: own streak per habit, frequency (daily / N a week / weekdays), day
   assert.match(await line(1), /^🔥 4 өдөр дараалан · Да·Лх·Ба$/);      // Tue/Thu/Sat/Sun are not run days
   assert.equal(await line(2), '🔥 5 удаа дараалан · 7 хоногт 1/2');    // weeks of 2+ in a row, this week still open
   assert.equal(await line(3), '🔥 1 өдөр дараалан');                   // Monday (a due day) missed: only Tuesday counts
-  // tick reading: it becomes "18 дахь өдөр"
+  // 66-day path: started 1 Oct → 18 Nov is day 49
+  const pw = page.locator('#tasks .task').nth(0).locator('.pw');
+  assert.equal(await pw.locator('span').textContent(), '49/66');
+  assert.equal(await pw.getAttribute('aria-label'), '66 хоногийн замын 49 дэх өдөр');
+  assert.equal(Math.round(parseFloat(await pw.locator('i').evaluate(e => e.style.width))), 74);
+    // tick reading: it becomes "18 дахь өдөр"
   await page.locator('#tasks .task').nth(0).click();
   assert.equal(await line(0), '🔥 18 дахь өдөр');
   // the day's score: fixed habits due today; "2 a week" counts only on a day it's done
@@ -554,4 +559,17 @@ test('habits: own streak per habit, frequency (daily / N a week / weekdays), day
   await page.click('#save');
   const saved = await page.evaluate(() => JSON.parse(localStorage.elsen_cfg).tasks.map(x => x.freq));
   assert.deepEqual(saved, [{ t: 'week', n: 4 }, { t: 'days', d: [1, 3, 5] }, { t: 'week', n: 2 }, { t: 'days', d: [1, 3, 5] }]);
+});
+
+test('66-day path: finished habits show it, a new habit starts at day 1', async t => {
+  const cfg = { dayStart: '00:00', sleepS: '23:00', sleepE: '07:00', workS: '09:00', workE: '18:00', v: 2,
+    tasks: [{ id: 'a', name: 'Хуучин', start: '2026-08-01' }] };
+  const { page } = await open(t, `()=>{localStorage.elsen_cfg=${JSON.stringify(JSON.stringify(cfg))}}`, { time: new Date(2026, 10, 18, 12, 0) });
+  const pw = page.locator('#tasks .task').nth(0).locator('.pw');
+  assert.equal(await pw.locator('span').textContent(), '66 ✓');
+  assert.match(await pw.getAttribute('class'), /\bfin\b/);
+  await page.click('#openSet'); await page.click('#addTask');
+  await page.locator('#editList input.nm').last().fill('Шинэ дадал'); await page.click('#save');
+  assert.equal(await page.locator('#tasks .task').nth(1).locator('.pw span').textContent(), '1/66');
+  assert.equal(await page.evaluate(() => cfg.tasks[1].start), '2026-11-18');
 });
