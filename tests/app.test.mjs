@@ -38,6 +38,9 @@ async function open(t, seed, opts = {}) {
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('response', r => { if (r.status() >= 400) errors.push(`HTTP ${r.status()} ${r.url()}`); });
+  // No seed: a person who already used the app (history exists, settings never saved) → the early default list.
+  // opts.fresh: a brand-new person (empty storage) → welcome screens.
+  if (!seed && !opts.fresh) seed = `()=>{localStorage.elsen_hist='{}'}`;
   if (seed) await ctx.addInitScript(`if(!sessionStorage.getItem('__seeded')){localStorage.clear();(${seed})();sessionStorage.setItem('__seeded','1')}`);
   await page.goto(base + (opts.query || ''));
   t.after(async () => { assert.deepEqual(errors, [], 'page errors'); await ctx.close(); });
@@ -419,7 +422,7 @@ test('weekly report: Sunday card on the Day tab, best day, weak task, totals; al
   const txt = await page.textContent('#wkDay');
   assert.match(txt, /93%/);                                   // 39 of 42
   assert.match(txt, /5 өдөр бүгдийг биелүүлсэн/);
-  assert.match(txt, /Сул даалгавар: Ном унших 30 минут 5\/7 өдөр/);
+  assert.match(txt, /Сул дадал: Ном унших 30 минут 5\/7 өдөр/);
   assert.match(txt, /Алхах 30 минут: 10\.5 км/);
   assert.match(txt, /Ус дунджаар 7 аяга/);
   assert.equal(await page.locator('#wkDay .wbars i.full').count(), 5);
@@ -677,7 +680,7 @@ test('stats follow habits: per-habit streaks, weekly goals, rest days, days with
   const avg = await page.evaluate(() => monthSummary(2026, 10, firstUseKey(), dayKey(new Date())).avg);
   assert.ok(avg > 50, `average ${avg}% should ignore empty days`);
   // weekly report: the weak habit is the swim, against its goal of 2
-  assert.match(await page.textContent('#wkStat'), /Сул даалгавар: Сэлэх 0\/2 удаа/);
+  assert.match(await page.textContent('#wkStat'), /Сул дадал: Сэлэх 0\/2 удаа/);
 });
 
 test('lesson of the day: one of 365, changes with the date, offline from i18n.js', async t => {
@@ -751,4 +754,97 @@ test('30-day challenge: start, today\'s task, tick, days go by, finish', async t
   const c = await page.evaluate(() => JSON.parse(localStorage.elsen_chal));
   assert.deepEqual(c.past, [{ id: 'sq', start: '2026-11-18', end: '2026-12-19', done: 1 }]);
   assert.ok(await page.evaluate(() => DATA_KEYS.includes('elsen_chal')));
+});
+
+test('first start: welcome screens pick a language, areas, 1–3 habits and hours; no sample habits appear', async t => {
+  const { page } = await open(t, null, { fresh: true, time: new Date(2026, 10, 18, 12, 0) });
+  assert.ok(await page.isVisible('#onb'));
+  assert.equal(await page.evaluate(() => cfg.tasks.length), 0);                      // nobody else's list
+  // language: English → the page reloads and stays on the welcome screens
+  await page.locator('#onbBody .langs button', { hasText: 'English' }).click();
+  await page.waitForFunction(() => document.documentElement.lang === 'en');
+  assert.ok(await page.isVisible('#onb'));
+  assert.equal(await page.textContent('#onbTitle'), 'Welcome');
+  await page.click('#onbNext');
+  assert.equal(await page.textContent('#onbTitle'), 'What would you like to learn?');
+  assert.ok(await page.locator('#onbNext').isDisabled());
+  await page.locator('.onbcats button', { hasText: 'Languages' }).click();
+  await page.locator('.onbcats button', { hasText: 'Calm' }).click();
+  await page.click('#onbNext');
+  const rows = page.locator('.onbpick .li');
+  assert.equal(await rows.count(), 14);                                               // 7 + 7 from the two areas
+  for (let i = 0; i < 4; i++) await rows.nth(i).click({ force: true });             // the 4th is refused
+  assert.equal(await page.locator('.onbpick .li[aria-checked=true]').count(), 3);
+  await page.click('#onbNext');
+  assert.equal(await page.textContent('#onbTitle'), 'Your day');
+  await page.fill('#onb_sleepS', '22:30'); await page.fill('#onb_workS', '08:00');
+  await page.click('#onbNext');
+  assert.ok(await page.isHidden('#onb'));
+  const c = await page.evaluate(() => JSON.parse(localStorage.elsen_cfg));
+  assert.equal(c.onboarded, true); assert.equal(c.lang, 'en');
+  assert.equal(c.sleepS, '22:30'); assert.equal(c.workS, '08:00');
+  assert.deepEqual(c.tasks.map(x => x.name), ['Learn new words', 'Language app lesson', 'Listen to a podcast in the language']);
+  assert.deepEqual(c.tasks[0].dose, { from: 5, to: 20, step: 5, unit: 'words', since: '2026-11-18' });
+  assert.equal(await page.locator('#tasks .task').count(), 3);
+  await page.reload();
+  assert.ok(await page.isHidden('#onb'));                                             // only once
+});
+
+test('first start: skipping leaves an empty list with a pointer to the library', async t => {
+  const { page } = await open(t, null, { fresh: true });
+  await page.click('#onbSkip');
+  assert.ok(await page.isHidden('#onb'));
+  assert.equal(await page.locator('#tasks .task').count(), 0);
+  assert.match(await page.textContent('#tasks .empty'), /Habit library/);         // a new phone in English
+});
+
+test('existing data never sees the welcome screens and keeps its own list', async t => {
+  const { page } = await open(t, `()=>{localStorage.elsen_cfg=JSON.stringify({tasks:[{id:'x',name:'Миний дадал'}]})}`);
+  assert.ok(await page.isHidden('#onb'));
+  assert.deepEqual(await page.evaluate(() => cfg.tasks.map(x => x.name)), ['Миний дадал']);
+  assert.equal(await page.evaluate(() => cfg.lang), 'mn');
+});
+
+test('language: Settings switches mn → en → cs; every text, date and the data stay right', async t => {
+  const { page } = await open(t, null, { time: new Date(2026, 10, 17, 12, 0) });
+  assert.equal(await page.textContent('nav.tabs button[data-v="v-stat"]'), '📊Статистик');
+  await page.click('#openSet');
+  await page.selectOption('#langSel', 'en');
+  await page.waitForFunction(() => document.documentElement.lang === 'en');
+  assert.equal(await page.textContent('h1'), 'Sand Clock');
+  assert.equal(await page.textContent('#date'), 'Tue, 17 November 2026');
+  assert.equal(await page.textContent('nav.tabs button[data-v="v-stat"]'), '📊Stats');
+  assert.equal(await page.locator('#tasks .task').count(), 6);                       // the list itself is the person's text
+  assert.match(await page.textContent('#lessonK'), /^Lesson of the day · /);
+  assert.equal(await page.textContent('#lessonT'), await page.evaluate(() => I18N.lessons[daysBetween('2026-01-01', '2026-11-17')][2]));
+  await page.click('#openSet');
+  await page.selectOption('#langSel', 'cs');
+  await page.waitForFunction(() => document.documentElement.lang === 'cs');
+  assert.equal(await page.textContent('#date'), 'Út 17. listopadu 2026');
+  await page.click('nav.tabs button[data-v="v-stat"]');
+  assert.equal(await page.textContent('#mTitle'), 'Listopad 2026');
+  // no Mongolian left on any tab (the person's own habit names aside)
+  for (const v of ['v-day', 'v-sw', 'v-food', 'v-stat']) {
+    await page.click(`nav.tabs button[data-v="${v}"]`);
+    const txt = await page.evaluate(() => { const c = document.querySelector('.view.on').cloneNode(true); c.querySelectorAll('#tasks,#swFor,#perTask,#wkStat,#wkDay,#dayInfo').forEach(e => e.remove()); return c.innerText; });
+    assert.doesNotMatch(txt, /[А-Яа-яӨөҮү]/, v);
+  }
+  await page.click('#openSet');
+  await page.selectOption('#langSel', 'mn');
+  await page.waitForFunction(() => document.documentElement.lang === 'mn');
+  assert.equal(await page.textContent('h1'), 'Элсэн цаг');
+});
+
+test('translations: every text the code shows has English and Czech', () => {
+  const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  const src = fs.readFileSync(path.join(ROOT, 'i18n.js'), 'utf8');
+  const I18N = new Function(src + ';return I18N')();
+  const ui = I18N.ui;
+  for (const [k, v] of Object.entries(ui)) assert.ok(Array.isArray(v) && v.length === 2 && v.every(x => typeof x === 'string' && x.length), k);
+  const js = html.slice(html.indexOf('<script src="i18n.js">'));
+  const used = [...js.matchAll(/\bT\("((?:[^"\\]|\\.)*)"/g)].map(m => m[1].replace(/\\"/g, '"')).filter(k => /[А-Яа-яӨөҮү]/.test(k));
+  const missing = [...new Set(used)].filter(k => !ui[k] && !ui[k.replace(/^[a-z]+:/, '')]);
+  assert.deepEqual(missing, []);
+  for (const l of I18N.lessons) assert.equal(l.length, 4);
+  for (const x of I18N.library) assert.equal(x.name.length, 3);
 });

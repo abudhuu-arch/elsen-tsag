@@ -391,6 +391,27 @@ input[type=time]::-webkit-date-and-time-value{text-align:left}
 .lesson .lk{font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:var(--dim)}
 .lesson .lt{font-size:15px;line-height:1.45;color:var(--ink);margin-top:4px}
 .lesson[data-kind=p] .lt,.lesson[data-kind=s] .lt{font-family:"Cormorant Garamond",serif;font-style:italic;font-size:19px;color:var(--sand3)}
+.onb{position:fixed;inset:0;z-index:30;background:radial-gradient(120% 60% at 50% 0%,#2a2018 0%,var(--bg) 60%);overflow:auto;overscroll-behavior:contain}
+.onbin{max-width:460px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;padding:calc(28px + env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom))}
+.onbdots{display:flex;gap:6px;justify-content:center;margin-bottom:22px}
+.onbdots i{width:7px;height:7px;border-radius:50%;background:var(--line)}.onbdots i.on{background:var(--sand);width:20px;border-radius:4px}
+#onbBody{flex:1}
+#onbBody h2{font-size:30px;margin-bottom:10px}
+#onbBody p{color:var(--mute);line-height:1.55;font-size:15px;margin-bottom:16px}
+.onbglass{font-size:64px;text-align:center;margin:10px 0 18px}
+.langs{display:grid;gap:8px;margin-top:8px}
+.langs button{text-align:left}
+.langs button.on{border-color:var(--sand);background:rgba(227,178,107,.12)}
+.onbcats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.onbcats button{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 10px;color:var(--ink);font:inherit;font-size:14px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px}
+.onbcats button span{font-size:28px}
+.onbcats button[aria-pressed=true]{border-color:var(--sand);background:rgba(227,178,107,.12)}
+.onbpick .li{cursor:pointer}.onbpick .li[aria-checked=true]{border-color:var(--sand)}
+.onbpick .li .box{flex:none}.onbpick .li[aria-checked=true] .box{background:var(--sand);border-color:var(--sand)}
+.onbpick .li[aria-checked=true] .box::after{content:"";width:7px;height:12px;border:solid #2a1d0c;border-width:0 3px 3px 0;transform:rotate(45deg) translate(-1px,-1px)}
+.onbpick .li[aria-disabled=true]{opacity:.45}
+.onbnav{margin-top:18px;position:sticky;bottom:0;padding:12px 0 4px;background:linear-gradient(180deg,rgba(15,13,11,0),var(--bg) 35%)}
+.onbskip{background:none;border:none;color:var(--dim);font:inherit;font-size:13px;margin-top:12px;padding:8px;cursor:pointer;text-decoration:underline}
 .libbtns{margin-top:10px}.libbtns .btn{font-size:13px;padding:11px 8px}
 .tabseg{display:flex;gap:6px;margin-bottom:12px}
 .tabseg button{flex:1;background:var(--card);border:1px solid var(--line);color:var(--mute);border-radius:10px;padding:9px 6px;font:inherit;font-size:13px;cursor:pointer}
@@ -644,6 +665,7 @@ input[type=time]::-webkit-date-and-time-value{text-align:left}
 <div class="sheet" id="sheet">
   <div class="panel" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
     <h3 id="sheetTitle" tabindex="-1">Тохиргоо</h3>
+    <div class="row"><label for="langSel">🌐 Хэл</label><select id="langSel"><option value="mn">Монгол</option><option value="en">English</option><option value="cs">Čeština</option></select></div>
     <div class="row"><label>Өдөр эхлэх цаг</label><input type="time" id="dayStart"></div>
     <div class="row"><label for="waterGoalIn">💧 Өдөрт уух ус <small class="hint">0 бол нуух</small></label><div class="pair"><input type="number" id="waterGoalIn" min="0" max="20" inputmode="numeric" style="width:70px">аяга</div></div>
     <label class="switch"><span>🔁 Ээлжээр ажилладаг <small class="hint">Унтах, ажлын цаг ээлжээр автоматаар солигдоно</small></span><input type="checkbox" id="shiftOn"><i aria-hidden="true"></i></label>
@@ -689,6 +711,15 @@ input[type=time]::-webkit-date-and-time-value{text-align:left}
   </div>
 </div>
 
+<div class="onb" id="onb" hidden role="dialog" aria-modal="true" aria-labelledby="onbTitle">
+  <div class="onbin">
+    <div class="onbdots" id="onbDots" aria-hidden="true"></div>
+    <div id="onbBody"></div>
+    <div class="pair2 onbnav"><button class="btn" id="onbBack">Буцах</button><button class="btn primary" id="onbNext">Үргэлжлүүлэх</button></div>
+    <button class="onbskip" id="onbSkip">Алгасах</button>
+  </div>
+</div>
+
 <div class="sheet" id="lib">
   <div class="panel" role="dialog" aria-modal="true" aria-labelledby="libTitle">
     <h3 id="libTitle" tabindex="-1">Дадлын сан</h3>
@@ -702,18 +733,19 @@ input[type=time]::-webkit-date-and-time-value{text-align:left}
 
 <script src="i18n.js"></script>
 <script>
+// A first start has no habits: the welcome screens help pick them. LEGACY_TASKS is the list early versions
+// started with; a saved setup from then that never stored its list keeps seeing (and keeps the history of) these.
 const DEFAULT = {
-  // Example schedule for a first start; each person changes it in Settings.
-  dayStart:"00:00", sleepS:"23:00", sleepE:"07:00", workS:"09:00", workE:"18:00",
-  tasks:[
+  dayStart:"00:00", sleepS:"23:00", sleepE:"07:00", workS:"09:00", workE:"18:00", tasks:[]
+};
+const LEGACY_TASKS=[
     {id:"t1",name:"Гадаад хэл 15 минут"},
     {id:"t2",name:"Ус уух 8 аяга"},
     {id:"t3",name:"Сунгалт 10 минут"},
     {id:"t4",name:"Алхах 30 минут"},
     {id:"t5",name:"Ном унших 30 минут"},
     {id:"t6",name:"Өдрийн тэмдэглэл бичих"}
-  ]
-};
+  ];
 const store = {
   get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},
   set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
@@ -727,7 +759,44 @@ try{ const raw=localStorage.getItem("elsen_cfg");
     if(v<SCHEMA&&localStorage.getItem(bk)==null){ const data={};
       for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i); if(/^elsen_/.test(k)&&!/^elsen_(undo|premig_)/.test(k)) data[k]=localStorage.getItem(k)}
       localStorage.setItem(bk,JSON.stringify({at:new Date().toISOString(),data})) } } }catch(e){}
-let cfg = Object.assign({}, DEFAULT, store.get("elsen_cfg",{}));
+const isObjT=o=>!!o&&typeof o==="object"&&!Array.isArray(o);
+const SAVED_CFG=store.get("elsen_cfg",null);
+// New on this device (nothing saved at all) → welcome screens. Anyone with data never sees them.
+// onboarded:false is saved only while the welcome screens are open (a language pick reloads the page).
+const FIRST_RUN=SAVED_CFG==null&&(()=>{try{return !Object.keys(localStorage).some(k=>/^elsen_(hist|tm|snap|sw|pantry|foodcfg|plan|water|qty|review|sleep|rest|chal)$/.test(k))}catch(e){return false}})()
+  ||isObjT(SAVED_CFG)&&SAVED_CFG.onboarded===false;
+let cfg = Object.assign({}, DEFAULT, isObjT(SAVED_CFG)?SAVED_CFG:{});
+if(!FIRST_RUN&&!(isObjT(SAVED_CFG)&&Array.isArray(SAVED_CFG.tasks))) cfg.tasks=LEGACY_TASKS.map(t=>({...t}));
+// Language: saved choice; earlier users had Mongolian; a new person gets the phone's language when we have it.
+const LANGS=["mn","en","cs"];
+if(!LANGS.includes(cfg.lang)) cfg.lang=FIRST_RUN?(()=>{const l=(navigator.language||"").slice(0,2).toLowerCase(); return LANGS.includes(l)?l:"en"})():"mn";
+cfg.onboarded=!FIRST_RUN;
+/* ---------- translation ----------
+   Mongolian text is the key; i18n.js gives [English, Čeština] for it. Missing → the Mongolian stays,
+   so index.html alone (no i18n.js) still works in Mongolian. "{n}" parts are filled from `v`;
+   "one|many" (English) and "one|few|many" (Czech) forms are chosen by v.n. */
+const I18=typeof I18N!=="undefined"?I18N:{langs:{},ui:{},lessons:[],cats:[],library:[],challenges:[]};
+const LI=()=>Math.max(0,LANGS.indexOf(cfg.lang));
+const tx=a=>Array.isArray(a)?(a[LI()]||a[0]):String(a??"");
+function T(s,v){
+  // "ctx:text" picks a meaning where one Mongolian word has two ("sw:Шинэчлэх" = reset); unknown ctx → plain text
+  const c=/^[a-z]+:/.exec(s); let r=c?s.slice(c[0].length):s; const li=LI();
+  if(li){const e=I18.ui[s]||(c&&I18.ui[r]); if(e&&e[li-1]) r=e[li-1]}
+  if(r.includes("|")){const f=r.split("|"), n=v&&typeof v.n==="number"?Math.abs(v.n):5;   // no number: the plural
+    r=li===2?f[n===1?0:n>=2&&n<=4?1:Math.min(2,f.length-1)]:f[n===1?0:Math.min(1,f.length-1)]}
+  return v?r.replace(/\{(\w+)\}/g,(m,k)=>k in v?v[k]:m):r;
+}
+const LOCALE=["mn-MN","en-GB","cs-CZ"][LI()];
+document.documentElement.lang=cfg.lang;
+// The page's fixed text (HTML) is Mongolian; swap it once at start. Text drawn later by the script uses T().
+(function translateStatic(){
+  if(!LI()) return;
+  document.title=T(document.title);
+  const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,{acceptNode:n=>/^(SCRIPT|STYLE)$/.test(n.parentNode.nodeName)?2:1});
+  for(let n;(n=w.nextNode());){const t=n.nodeValue.trim(); if(t&&/[А-Яа-яӨөҮү]/.test(t)){const r=T(t); if(r!==t) n.nodeValue=n.nodeValue.replace(t,r)}}
+  document.querySelectorAll("[aria-label],[placeholder],[title]").forEach(e=>["aria-label","placeholder","title"].forEach(a=>{
+    const v=e.getAttribute(a); if(v&&/[А-Яа-яӨөҮү]/.test(v)) e.setAttribute(a,T(v))}));
+})();
 let hist = store.get("elsen_hist",{}); // {dayKey:{taskId:"HH:MM"}}  (unchanged format)
 // Migration: older saved tasks have only {id,name}. Add a timer length (read from the name,
 // e.g. "Ном унших 30 минут" -> 30) and an empty reminder. Nothing existing is removed.
@@ -754,9 +823,9 @@ cfg.sandSound=cfg.sandSound===true;          // off unless turned on
 cfg.waterGoal=Number.isFinite(+cfg.waterGoal)&&cfg.waterGoal!==null&&cfg.waterGoal!==""?Math.max(0,Math.min(20,Math.round(+cfg.waterGoal))):8;
 // Shift rotation: shifts take turns every `every` days; `cur` was running on day `from`.
 const SHIFT_DEFAULT=()=>({on:false,every:7,cur:0,from:"",list:[
-  {id:"s1",name:"Өглөөний ээлж",workS:"06:00",workE:"14:00",sleepS:"22:00",sleepE:"05:00"},
-  {id:"s2",name:"Оройн ээлж",workS:"14:00",workE:"22:00",sleepS:"00:00",sleepE:"08:00"},
-  {id:"s3",name:"Шөнийн ээлж",workS:"22:00",workE:"06:00",sleepS:"08:00",sleepE:"15:00"}]});
+  {id:"s1",name:T("Өглөөний ээлж"),workS:"06:00",workE:"14:00",sleepS:"22:00",sleepE:"05:00"},
+  {id:"s2",name:T("Оройн ээлж"),workS:"14:00",workE:"22:00",sleepS:"00:00",sleepE:"08:00"},
+  {id:"s3",name:T("Шөнийн ээлж"),workS:"22:00",workE:"06:00",sleepS:"08:00",sleepE:"15:00"}]});
 { const d=SHIFT_DEFAULT(), sh=isObj(cfg.shifts)?cfg.shifts:{};
   const list=Array.isArray(sh.list)?sh.list.filter(x=>isObj(x)&&typeof x.name==="string").map((x,i)=>({id:String(x.id||"s"+i),name:x.name,
     workS:isHM(x.workS)?x.workS:"08:00",workE:isHM(x.workE)?x.workE:"17:00",sleepS:isHM(x.sleepS)?x.sleepS:"23:00",sleepE:isHM(x.sleepE)?x.sleepE:"07:00"})):d.list;
@@ -799,9 +868,16 @@ for(const k in snap) if(!Array.isArray(snap[k])) delete snap[k];
 const $ = id => document.getElementById(id);
 const toMin = s => {const [h,m]=s.split(":").map(Number);return h*60+m};
 const pad = n => String(n).padStart(2,"0");
-const fmtDur = m => {m=Math.max(0,Math.round(m));const h=Math.floor(m/60),mm=m%60;return h?`${h}ц ${mm}м`:`${mm}м`};
-const MONTHS=["1-р сар","2-р сар","3-р сар","4-р сар","5-р сар","6-р сар","7-р сар","8-р сар","9-р сар","10-р сар","11-р сар","12-р сар"];
-const WD=["Ням","Дав","Мяг","Лха","Пүр","Баа","Бям"];
+const fmtDur = m => {m=Math.max(0,Math.round(m));const h=Math.floor(m/60),mm=m%60;return h?T("{h}ц {m}м",{h,m:mm}):T("{m}м",{m:mm})};
+// Dates: Mongolian is written by hand; English and Czech come from the browser's own calendar names.
+const cap=x=>x?x[0].toUpperCase()+x.slice(1):x;
+const intl=o=>{try{return new Intl.DateTimeFormat(LOCALE,o)}catch(e){return new Intl.DateTimeFormat("en-GB",o)}};
+const wdNames=w=>Array.from({length:7},(_,i)=>cap(intl({weekday:w}).format(new Date(2026,10,15+i))));
+const MONTHS=LI()?Array.from({length:12},(_,m)=>cap(intl({month:"long"}).format(new Date(2026,m,1)))):["1-р сар","2-р сар","3-р сар","4-р сар","5-р сар","6-р сар","7-р сар","8-р сар","9-р сар","10-р сар","11-р сар","12-р сар"];
+const WD=LI()?wdNames("short"):["Ням","Дав","Мяг","Лха","Пүр","Баа","Бям"];
+const fmtMD=d=>LI()?intl({day:"numeric",month:"long"}).format(d):`${MONTHS[d.getMonth()]}ын ${d.getDate()}`;
+const fmtYM=(y,m)=>LI()?cap(intl({month:"long",year:"numeric"}).format(new Date(y,m,1))):`${y} оны ${MONTHS[m]}`;
+const fmtLong=d=>LI()?cap(intl({weekday:"short",day:"numeric",month:"long",year:"numeric"}).format(d)):`${d.getFullYear()} оны ${MONTHS[d.getMonth()]}ын ${d.getDate()}, ${WD[d.getDay()]}`;
 
 // The "day" runs from cfg.dayStart to the next cfg.dayStart by the wall clock. Decided from the wall clock,
 // not by subtracting fixed milliseconds, so daylight-saving days (23 h / 25 h) land on the right date.
@@ -851,11 +927,11 @@ function renderShiftInfo(){
   const el=$("shiftInfo"), k=dayKey(new Date()), sh=shiftOn(k);
   el.hidden=!sh; if(!sh) return;
   const nd=dayDate(sh.nextKey);
-  el.innerHTML=`<span>🔁 <b></b> · ${sh.day}/${sh.every} дэх өдөр</span><span>Дараа нь: <b></b> · ${MONTHS[nd.getMonth()]}ын ${nd.getDate()}, ${WD[nd.getDay()]}</span>`;
+  el.innerHTML=`<span>🔁 <b></b> · ${T("{d}/{n} дэх өдөр",{d:sh.day,n:sh.every})}</span><span>${T("Дараа нь")}: <b></b> · ${fmtMD(nd)}, ${WD[nd.getDay()]}</span>`;
   const bs=el.querySelectorAll("b"); bs[0].textContent=sh.shift.name; bs[1].textContent=sh.next.name;
   if(sh.next===sh.shift) el.lastChild.hidden=true;
 }
-const NAMES={sleep:"Унтах цаг",work:"Ажлын цаг",free:"Чөлөөт цаг"};
+const NAMES={sleep:T("Унтах цаг"),work:T("Ажлын цаг"),free:T("Чөлөөт цаг")};
 
 // minutes since the current block began (1 = it began this minute)
 function prevChange(m){
@@ -922,7 +998,7 @@ function setClock(n){
     if(clockTxt&&!REDUCED){e.classList.remove("roll"); void e.offsetWidth; e.classList.add("roll")}
   }
   clockTxt=t;
-  $("clock").setAttribute("aria-label",`Цаг ${n.getHours()}:${pad(n.getMinutes())}`);
+  $("clock").setAttribute("aria-label",T("Цаг {t}",{t:`${n.getHours()}:${pad(n.getMinutes())}`}));
   if(REDUCED||!grainsOn) drawRing(n);
 }
 
@@ -1063,6 +1139,7 @@ function renderTasks(){
   const k=dayKey(new Date()), done=todayDone(), box=$("tasks"); box.innerHTML="";
   const ids=cfg.tasks.filter(t=>countsOn(t,k)).map(t=>t.id);       // today's score: habits due today (+ extras done)
   if((snap[k]||[]).join()!==ids.join()){snap[k]=ids; store.set("elsen_snap",snap)}
+  if(!cfg.tasks.length){const e=document.createElement("div"); e.className="empty"; e.textContent=T("Одоогоор дадал алга. Доорх «Дадлын сан»-аас эхний дадлаа сонгоорой."); box.appendChild(e)}
   cfg.tasks.forEach(t=>{
     const el=document.createElement("div");
     el.className="task"+(done[t.id]?" done":"")+(isDue(t,k)?"":" off")+(!done[t.id]&&restPicked(t,k)?" rest":""); el.dataset.id=t.id;
@@ -1074,8 +1151,8 @@ function renderTasks(){
     { const picked=!done[t.id]&&restPicked(t,k), used=monthRests(t,k).length;
       if(picked||(!done[t.id]&&isDue(t,k)&&used<REST_MONTH&&streakOf(t,k)>0)){      // only when there is a streak to keep
         const rb=document.createElement("button"); rb.className="rbtn"+(picked?" on":"");
-        rb.textContent=picked?"Буцаах":`☾ Амрах ${REST_MONTH-used}/${REST_MONTH}`;
-        rb.setAttribute("aria-label",picked?`Амралтыг цуцлах: ${t.name}`:`Өнөөдөр амрах: ${t.name}. Энэ сард ${REST_MONTH-used} удаа үлдсэн, дараалал тасрахгүй`);
+        rb.textContent=picked?T("Буцаах"):`☾ ${T("Амрах")} ${REST_MONTH-used}/${REST_MONTH}`;
+        rb.setAttribute("aria-label",picked?T("Амралтыг цуцлах: {name}",{name:t.name}):T("Өнөөдөр амрах: {name}. Энэ сард {n} удаа үлдсэн, дараалал тасрахгүй",{name:t.name,n:REST_MONTH-used}));
         rb.onclick=e=>{e.stopPropagation(); setRest(t,k,!picked); buzz(12); renderTasks(); renderWeek()};
         if(st) stEl.append(" · "); stEl.appendChild(rb);
       } }
@@ -1083,15 +1160,15 @@ function renderTasks(){
     { const d=pathDay(t,k), pw=el.querySelector(".pw"), fin=d>=PATH;
       pw.classList.toggle("fin",fin); pw.querySelector("i").style.width=Math.min(100,d/PATH*100)+"%";
       pw.querySelector("span").textContent=fin?"66 ✓":`${d}/${PATH}`;
-      pw.title=fin?"66 хоногийн зам дууссан":`66 хоногийн замын ${d} ${ordSuf(d)} өдөр`; pw.setAttribute("aria-label",pw.title); pw.setAttribute("role","img") }
+      pw.title=fin?T("66 хоногийн зам дууссан"):T("66 хоногийн замын {n} {ord} өдөр",{n:d,ord:ordSuf(d)}); pw.setAttribute("aria-label",pw.title); pw.setAttribute("role","img") }
     const wl=t.link==="water"&&cfg.waterGoal>0;
     if(wl){ el.classList.add("wlink"); el.querySelector(".tp").hidden=false;
       const n=water[k]||0; el.querySelector(".tp i").style.width=Math.min(100,n/cfg.waterGoal*100)+"%";
-      el.setAttribute("aria-label",`${t.name}: ${n}/${cfg.waterGoal} аяга. Дарж нэг аяга нэмнэ`) }
+      el.setAttribute("aria-label",T("{name}: {n}/{g} аяга. Дарж нэг аяга нэмнэ",{name:t.name,n,g:cfg.waterGoal})) }
     if(t.unit) el.appendChild(qtyButton(t,k));
     if(t.min>0&&!done[t.id]){
       const r=document.createElement("button"); r.className="treset"; r.textContent="↺"; r.hidden=true;
-      r.setAttribute("aria-label","Таймерыг эхнээс нь: "+t.name);
+      r.setAttribute("aria-label",T("Таймерыг эхнээс нь: {name}",{name:t.name}));
       r.onclick=e=>{e.stopPropagation(); const s=(tm[k]||{})[t.id]; if(s&&!s.run){s.base=s.acc; saveTm(); updateTaskTimers()}};
       const b=document.createElement("button"); b.className="tbtn";
       b.onclick=e=>{e.stopPropagation(); timerToggle(t)};
@@ -1134,7 +1211,7 @@ function qtyButton(t,k){
   const b=document.createElement("button"); b.className="tqty";
   const v=(qty[k]||{})[t.id];
   b.textContent=v?`${fmtQ(v)} ${t.unit}`:`+ ${t.unit}`; b.classList.toggle("has",!!v);
-  b.setAttribute("aria-label",`${t.name}: ${v?fmtQ(v)+" "+t.unit+". Засах":t.unit+" бүртгэх"}`);
+  b.setAttribute("aria-label",`${t.name}: ${v?fmtQ(v)+" "+t.unit+". "+T("Засах"):T("{unit} бүртгэх",{unit:t.unit})}`);
   b.onclick=e=>{
     e.stopPropagation();
     // text + decimal keypad: a number field drops "5,5" (the comma many phone keypads show)
@@ -1160,7 +1237,7 @@ let review=store.get("elsen_review",{});
 if(!isObj(review)) review={};
 for(const k in review){const v=review[k]; if(!isObj(v)||!(v.r>=1&&v.r<=5)){delete review[k];continue}
   review[k]={r:Math.round(v.r),n:typeof v.n==="string"?v.n.slice(0,140):""}}
-const RATES=[["😣","Муу"],["😕","Тааруу"],["😐","Дунд"],["🙂","Сайн"],["🤩","Гайхалтай"]];
+const RATES=[["😣","Муу"],["😕","Тааруу"],["😐","Дунд"],["🙂","Сайн"],["🤩","Гайхалтай"]].map(([e,l])=>[e,T(l)]);
 (function(){const box=$("rates");
   RATES.forEach(([e,l],i)=>{const b=document.createElement("button"); b.setAttribute("role","radio"); b.innerHTML=`<span>${e}</span>${l}`;
     b.setAttribute("aria-label",`${i+1}: ${l}`);
@@ -1170,8 +1247,8 @@ const RATES=[["😣","Муу"],["😕","Тааруу"],["😐","Дунд"],["�
     box.appendChild(b)})})();
 $("revNote").onchange=$("revNote").onblur=()=>{
   const k=dayKey(new Date()), n=$("revNote").value.trim().slice(0,140), v=review[k];
-  if(!v){ if(n) toast("Эхлээд үнэлгээгээ сонгоно уу"); return }
-  if(v.n!==n){v.n=n; store.set("elsen_review",review); toast("Тойм хадгалагдлаа ✓")}
+  if(!v){ if(n) toast(T("Эхлээд үнэлгээгээ сонгоно уу")); return }
+  if(v.n!==n){v.n=n; store.set("elsen_review",review); toast(T("Тойм хадгалагдлаа ✓"))}
 };
 $("revNote").onkeydown=e=>{if(e.key==="Enter")e.target.blur()};
 // Shown in the last 6 hours of the day (the evening, whatever the shift), or once something is saved.
@@ -1180,7 +1257,7 @@ function renderReview(){
   $("reviewSec").hidden=!show; if(!show) return;
   $("rates").querySelectorAll("button").forEach((b,i)=>b.setAttribute("aria-checked",!!v&&v.r===i+1));
   if(document.activeElement!==$("revNote")) $("revNote").value=v?v.n:"";
-  $("revWhen").textContent=v?"✓ Хадгалсан":"";
+  $("revWhen").textContent=v?T("✓ Хадгалсан"):"";
 }
 
 /* ---------- sleep: when you fell asleep and woke up; saved on the day you woke ---------- */
@@ -1207,14 +1284,14 @@ function renderSleep(){
   if(document.activeElement!==$("slW")) $("slW").value=v?v.w:(slDraft.k===k&&slDraft.w)||"";
   $("slDur").textContent=v?fmtDur(sleepMin(v)):"—";
   const a=sleepAvg(k,7);
-  $("slAvg").textContent=a?`7 хоногт дунджаар ${fmtDur(a.min)}`:"";
+  $("slAvg").textContent=a?T("7 хоногт дунджаар {d}",{d:fmtDur(a.min)}):"";
   $("slNow").hidden=!!(v&&v.w);
 }
 $("slS").onchange=()=>{slDraft.k=dayKey(new Date()); saveSleep()};
 $("slW").onchange=()=>{slDraft.k=dayKey(new Date()); saveSleep()};
 $("slNow").onclick=()=>{
   $("slW").value=hhmm(new Date()); slDraft.k=dayKey(new Date());
-  if(!$("slS").value){ const sc=sch(); $("slS").value=`${pad(Math.floor(sc.sleepS/60))}:${pad(sc.sleepS%60)}`; toast("Унтсан цагийг хуваариас бөглөлөө, зөв эсэхийг шалгана уу") }
+  if(!$("slS").value){ const sc=sch(); $("slS").value=`${pad(Math.floor(sc.sleepS/60))}:${pad(sc.sleepS%60)}`; toast(T("Унтсан цагийг хуваариас бөглөлөө, зөв эсэхийг шалгана уу")) }
   saveSleep(); buzz(12);
 };
 
@@ -1246,10 +1323,10 @@ function renderWater(){
       box.appendChild(b)}
   }
   [...box.children].forEach((b,i)=>{b.classList.toggle("on",i<n); b.classList.toggle("extra",i>=g);
-    b.setAttribute("aria-label",`${i+1} аяга`+(i<n?" (уусан)":"")); b.setAttribute("aria-pressed",i<n)});
+    b.setAttribute("aria-label",T("{n} аяга",{n:i+1})+(i<n?T(" (уусан)"):"")); b.setAttribute("aria-pressed",i<n)});
   $("wMinus").disabled=!n;
 }
-$("wPlus").onclick=()=>{const n=(water[dayKey(new Date())]||0)+1; buzz(n===cfg.waterGoal?[30,40,60]:12); setWater(n); if(n===cfg.waterGoal) toast("💧 Өнөөдрийн ус бүрэн уугдлаа")};
+$("wPlus").onclick=()=>{const n=(water[dayKey(new Date())]||0)+1; buzz(n===cfg.waterGoal?[30,40,60]:12); setWater(n); if(n===cfg.waterGoal) toast(T("💧 Өнөөдрийн ус бүрэн уугдлаа"))};
 $("wMinus").onclick=()=>setWater((water[dayKey(new Date())]||0)-1);
 
 // A day is scored against the tasks it had (snapshot); days before snapshots existed use today's list.
@@ -1338,8 +1415,8 @@ function bestStreakOf(t){
 }
 // Mongolian ordinal: 1 дэх, 2 дахь, 4 дэх, 9 дэх, 40 дэх, 12 дахь…
 function ordSuf(n){const u=n%10, d=Math.floor(n/10)%10; const w=u||d; return (w===1&&u)||w===4||w===9?"дэх":"дахь"}
-const WD_MON=["Да","Мя","Лх","Пү","Ба","Бя","Ня"];          // Monday first
-const freqText=f=>!f||f.t==="daily"?"Өдөр бүр":f.t==="week"?`7 хоногт ${f.n} удаа`:[1,2,3,4,5,6,0].filter(x=>f.d.includes(x)).map(x=>WD_MON[(x+6)%7]).join("·");
+const WD_MON=["Да","Мя","Лх","Пү","Ба","Бя","Ня"].map(x=>T(x));          // Monday first
+const freqText=f=>!f||f.t==="daily"?T("Өдөр бүр"):f.t==="week"?T("7 хоногт {n} удаа",{n:f.n}):[1,2,3,4,5,6,0].filter(x=>f.d.includes(x)).map(x=>WD_MON[(x+6)%7]).join("·");
 // Today's amount of a "start small" habit; minutes also set its timer.
 function doseNow(t,k){
   const d=t.dose; if(!d) return 0;
@@ -1355,12 +1432,12 @@ const pathDay=(t,k)=>daysBetween(startOf(t),k)+1;
 // The line under a habit's name: streak, and how often it is due.
 function habitLine(t,k){
   const s=streakOf(t,k), wk=(t.freq||{}).t==="week", p=[];
-  if(t.after) p.push(`🔗 ${t.after} дараа`);
-  if(s>0) p.push(doneOn(t,k)?`🔥 ${s} ${ordSuf(s)} ${wk?"удаа":"өдөр"}`:`🔥 ${s} ${wk?"удаа":"өдөр"} дараалан`);
-  if(!doneOn(t,k)&&restPicked(t,k)) p.push("☾ Амралтын өдөр");
+  if(t.after) p.push("🔗 "+T("{x} дараа",{x:t.after}));
+  if(s>0) p.push("🔥 "+(doneOn(t,k)?T(wk?"{n} {ord} удаа":"{n} {ord} өдөр",{n:s,ord:ordSuf(s)}):T(wk?"{n} удаа дараалан":"{n} өдөр дараалан",{n:s})));
+  if(!doneOn(t,k)&&restPicked(t,k)) p.push(T("☾ Амралтын өдөр"));
   if(t.dose){const v=doseNow(t,k); p.push(v===t.dose.to?`🎯 ${fmtQ(v)} ${t.dose.unit}`:`📈 ${fmtQ(v)} → ${fmtQ(t.dose.to)} ${t.dose.unit}`)}
-  if(wk) p.push(`7 хоногт ${weekDone(t,k)}/${t.freq.n}`);
-  else if((t.freq||{}).t==="days") p.push(fixedDue(t,k)?freqText(t.freq):`Өнөөдөр биш · ${freqText(t.freq)}`);
+  if(wk) p.push(T("7 хоногт {a}/{b}",{a:weekDone(t,k),b:t.freq.n}));
+  else if((t.freq||{}).t==="days") p.push(fixedDue(t,k)?freqText(t.freq):T("Өнөөдөр биш")+" · "+freqText(t.freq));
   return p.join(" · ");
 }
 
@@ -1387,9 +1464,9 @@ function timerToggle(t){
 function completeTask(k,id,at){const d=hist[k]||(hist[k]={}); if(!d[id]){d[id]=hhmm(at); store.set("elsen_hist",hist)}}
 function timerDone(t){
   chime(); buzz([300,150,300]);
-  const msg=`${t.name} · ${t.min} минут дууслаа ✓`;
+  const msg=T("{name} · {n} минут дууслаа ✓",{name:t.name,n:t.min});
   toast("⏳ "+msg);
-  if(typeof notify==="function") notify("Хугацаа дууслаа",msg,"timer-"+t.id);
+  if(typeof notify==="function") notify(T("Хугацаа дууслаа"),msg,"timer-"+t.id);
 }
 function dayStartTime(k){const [y,m,d]=k.split("-").map(Number);return new Date(y,m-1,d,0,toMin(cfg.dayStart))}
 function checkTimers(){
@@ -1429,8 +1506,8 @@ function updateTaskTimers(){
     if(rs) rs.hidden=running||!(p>0&&p<goal);
     if(b){
       const partial=p>0&&p<goal;
-      b.textContent=running?`⏸ ${fmtLeft(goal-p)}`:partial?`▶ ${fmtLeft(goal-p)}`:`▶ ${t.min}м`;
-      b.setAttribute("aria-label",(running?"Таймер зогсоох: ":"Таймер эхлүүлэх: ")+t.name);
+      b.textContent=running?`⏸ ${fmtLeft(goal-p)}`:partial?`▶ ${fmtLeft(goal-p)}`:`▶ ${T("{m}м",{m:t.min})}`;
+      b.setAttribute("aria-label",T(running?"Таймер зогсоох: {name}":"Таймер эхлүүлэх: {name}",{name:t.name}));
     }
     const tmEl=el.querySelector(".tm");
     tmEl.textContent=done[t.id]||""; tmEl.className="tm";
@@ -1491,7 +1568,7 @@ function renderWeek(){
     const el=document.createElement("button");
     el.className="day"+(c===tot&&tot?" full":c?" part":"")+(i===0?" today":"");
     el.innerHTML=`<div class="d">${WD[d.getDay()]}</div><div class="dot">${c===tot&&tot?"✓":c||""}</div>`;
-    el.setAttribute("aria-label",`${WD_FULL[d.getDay()]}: ${c}/${tot}. Дэлгэрэнгүй`);
+    el.setAttribute("aria-label",`${WD_FULL[d.getDay()]}: ${c}/${tot}. ${T("Дэлгэрэнгүй")}`);
     el.onclick=()=>{statY=d.getFullYear(); statM=d.getMonth(); statSel=k; goView("v-stat")};  // open that day in Stats
     w.appendChild(el);
   }
@@ -1504,7 +1581,7 @@ function renderWeek(){
     const ok=dayKept(k);
     if(tot&&c===tot) s++; else if(i===0) continue; else if(!tot&&k>=firstUseKey()) continue; else if(ok) continue; else break;
   }
-  $("streak").innerHTML = s ? `Тасралтгүй <b>${s}</b> өдөр бүгдийг биелүүлсэн` : `Өнөөдрөөс эхлээд дараалал үүсгээрэй`;
+  $("streak").innerHTML = s ? T("Тасралтгүй <b>{n}</b> өдөр бүгдийг биелүүлсэн",{n:s}) : T("Өнөөдрөөс эхлээд дараалал үүсгээрэй");
 }
 
 /* ---------- tick ---------- */
@@ -1521,7 +1598,7 @@ function tick(){
   setClock(n);
   const remSec=Math.max(0,Math.round((end-n)/1000));
   const rh=Math.floor(remSec/3600), rm=Math.floor(remSec%3600/60), rs=remSec%60;
-  $("left").innerHTML=`Өдөр дуусахад <b>${pad(rh)}:${pad(rm)}:${pad(rs)}</b> · ${Math.round(elapsed*100)}% урссан`;
+  $("left").innerHTML=T("Өдөр дуусахад <b>{t}</b> · {p}% урссан",{t:`${pad(rh)}:${pad(rm)}:${pad(rs)}`,p:Math.round(elapsed*100)});
   const mk=$("marker"); if(mk) mk.style.left=`calc(${elapsed*100}% - 1px)`;
 
   const cur=blockAt(Math.floor(m)), nx=nextChange(Math.floor(m));
@@ -1531,15 +1608,15 @@ function tick(){
     // real instants of this block's start and end (wall clock → Date handles daylight saving)
     const bEnd=atWall(n,Math.floor(m)+nx.at), pv=prevChange(Math.floor(m)), bStart=atWall(n,Math.floor(m)-pv+1);
     const left=Math.max(0,bEnd-n), tot=Math.max(1,bEnd-bStart);
-    $("nowSub").textContent=`${fmtDur(Math.ceil(left/60000))} үлдсэн`;
+    $("nowSub").textContent=T("{d} үлдсэн",{d:fmtDur(Math.ceil(left/60000))});
     $("nowProg").style.width=Math.min(100,(n-bStart)/tot*100)+"%";
     $("nowProg").parentNode.hidden=false;
   } else { $("nowSub").textContent=""; $("nowProg").parentNode.hidden=true; }
   $("nextBlock").textContent=nx?NAMES[nx.b]:"—";
-  if(nx){const t=(Math.floor(m)+nx.at)%1440;$("nextSub").textContent=`${pad(Math.floor(t/60))}:${pad(t%60)}-д`}
+  if(nx){const t=(Math.floor(m)+nx.at)%1440;$("nextSub").textContent=T("{t}-д",{t:`${pad(Math.floor(t/60))}:${pad(t%60)}`})}
 
   if(n.getMinutes()!==lastMin){lastMin=n.getMinutes(); if(typeof renderReview==="function"){renderReview(); renderWeekDay()}}
-  $("date").textContent=`${n.getFullYear()} оны ${MONTHS[n.getMonth()]}ын ${n.getDate()}, ${WD[n.getDay()]}`;
+  $("date").textContent=fmtLong(n);
   const k=dayKey(n);
   if(k!==lastKey){ // new day: hourglass flips, list resets
     lastKey=k; applyDose(); drawBar(); renderTasks(); renderWeek(); flipGlass(); store.set("elsen_seen",k);
@@ -1586,21 +1663,21 @@ function renderEdit(){
   draft.forEach((t,i)=>{
     const wrap=document.createElement("div");wrap.className="editbox";
     const r=document.createElement("div");r.className="edit";
-    const inp=document.createElement("input");inp.type="text";inp.className="nm";inp.value=t.name;inp.placeholder="Жишээ нь: Ном унших";inp.oninput=e=>t.name=e.target.value;
-    const b=document.createElement("button");b.className="del";b.textContent="×";b.setAttribute("aria-label","Устгах");b.onclick=()=>{draft.splice(i,1);renderEdit()};
+    const inp=document.createElement("input");inp.type="text";inp.className="nm";inp.value=t.name;inp.placeholder=T("Жишээ нь: Ном унших");inp.oninput=e=>t.name=e.target.value;
+    const b=document.createElement("button");b.className="del";b.textContent="×";b.setAttribute("aria-label",T("Устгах"));b.onclick=()=>{draft.splice(i,1);renderEdit()};
     r.append(inp,b);
     const o=document.createElement("div");o.className="opts";
-    const lm=document.createElement("label");lm.innerHTML=`<span>⏱ Таймер</span>`;
+    const lm=document.createElement("label");lm.innerHTML=`<span>⏱ ${T("Таймер")}</span>`;
     const mi=document.createElement("input");mi.type="number";mi.min="0";mi.max="600";mi.inputMode="numeric";mi.placeholder="—";mi.value=t.min||"";
     mi.oninput=e=>t.min=Math.max(0,Math.min(600,parseInt(e.target.value,10)||0));
-    const mu=document.createElement("span");mu.textContent="мин";
+    const mu=document.createElement("span");mu.textContent=T("мин");
     lm.append(mi,mu); o.appendChild(lm);
-    const lu=document.createElement("label"); lu.innerHTML=`<span>📏 Тоо</span>`;
-    const ui=document.createElement("input"); ui.type="text"; ui.className="unit"; ui.maxLength=12; ui.placeholder="км, хуудас…"; ui.value=t.unit||"";
-    ui.setAttribute("aria-label","Бүртгэх нэгж: "+(t.name||"зүйл")); ui.oninput=e=>t.unit=e.target.value;
+    const lu=document.createElement("label"); lu.innerHTML=`<span>📏 ${T("Тоо")}</span>`;
+    const ui=document.createElement("input"); ui.type="text"; ui.className="unit"; ui.maxLength=12; ui.placeholder=T("км, хуудас…"); ui.value=t.unit||"";
+    ui.setAttribute("aria-label",T("Бүртгэх нэгж: {name}",{name:t.name||T("зүйл")})); ui.oninput=e=>t.unit=e.target.value;
     lu.appendChild(ui); o.appendChild(lu);
-    const lw=document.createElement("label"); lw.className="wl"; lw.innerHTML=`<input type="checkbox"><span>💧 Устай холбох</span>`;
-    const wc=lw.querySelector("input"); wc.checked=t.link==="water"; wc.setAttribute("aria-label","Ус тоологчтой холбох: "+(t.name||"зүйл"));
+    const lw=document.createElement("label"); lw.className="wl"; lw.innerHTML=`<input type="checkbox"><span>💧 ${T("Устай холбох")}</span>`;
+    const wc=lw.querySelector("input"); wc.checked=t.link==="water"; wc.setAttribute("aria-label",T("Ус тоологчтой холбох: {name}",{name:t.name||T("зүйл")}));
     wc.onchange=()=>{draft.forEach(x=>{if(x!==t&&wc.checked)x.link=""}); t.link=wc.checked?"water":""; renderEdit()};
     if(typeof remEditor==="function") o.appendChild(remEditor(t));
     o.appendChild(lw);
@@ -1608,8 +1685,8 @@ function renderEdit(){
     o.appendChild(doseEditor(t));
     o.appendChild(afterEditor(t));
     const mv=document.createElement("div"); mv.className="mv";
-    [["↑",-1,"Дээш"],["↓",1,"Доош"]].forEach(([s,d,lab])=>{
-      const x=document.createElement("button"); x.textContent=s; x.setAttribute("aria-label",lab+": "+(t.name||"зүйл"));
+    [["↑",-1,T("Дээш")],["↓",1,T("Доош")]].forEach(([s,d,lab])=>{
+      const x=document.createElement("button"); x.textContent=s; x.setAttribute("aria-label",lab+": "+(t.name||T("зүйл")));
       x.disabled=i+d<0||i+d>=draft.length;
       x.onclick=()=>{[draft[i],draft[i+d]]=[draft[i+d],draft[i]]; renderEdit(); const bs=$("editList").children[i+d].querySelectorAll(".mv button"); const f=bs[d<0?0:1].disabled?bs[d<0?1:0]:bs[d<0?0:1]; f.focus()};
       mv.appendChild(x);
@@ -1627,45 +1704,46 @@ function doseSaved(t){
 }
 function doseEditor(t){
   const w=document.createElement("div"); w.className="fq dose";
-  const d=t.dose||{}, nm=(t.name||"зүйл");
-  w.innerHTML=`<span>📈 Жижгээс</span>`;
+  const d=t.dose||{}, nm=(t.name||T("зүйл"));
+  w.innerHTML=`<span>📈 ${T("Жижгээс")}</span>`;
   const num=(v,lab,ph)=>{const i=document.createElement("input"); i.type="text"; i.inputMode="decimal"; i.className="dn"; i.value=v??""; i.placeholder=ph; i.setAttribute("aria-label",lab+": "+nm); return i};
-  const a=num(d.from,"Эхлэх хэмжээ","5"), b=num(d.to,"Зорилгын хэмжээ","30"), st=num(d.step,"7 хоног тутам нэмэх","5");
-  const u=document.createElement("input"); u.type="text"; u.className="du"; u.maxLength=12; u.value=d.unit||""; u.placeholder="мин"; u.setAttribute("aria-label","Хэмжих нэгж: "+nm);
+  const a=num(d.from,T("Эхлэх хэмжээ"),"5"), b=num(d.to,T("Зорилгын хэмжээ"),"30"), st=num(d.step,T("7 хоног тутам нэмэх"),"5");
+  const u=document.createElement("input"); u.type="text"; u.className="du"; u.maxLength=12; u.value=d.unit||""; u.placeholder=T("мин"); u.setAttribute("aria-label",T("Хэмжих нэгж: {name}",{name:nm}));
   // minutes set the timer: its own field is then read-only
   const lockTimer=()=>{const mi=w.parentNode&&w.parentNode.querySelector("input[type=number]"); if(!mi) return;
-    const on=!!(t.dose&&isMinUnit(t.dose.unit)); mi.disabled=on; mi.title=on?"«Жижгээс»-ийн хэмжээгээр тохирно":""};
+    const on=!!(t.dose&&isMinUnit(t.dose.unit)); mi.disabled=on; mi.title=on?T("«Жижгээс»-ийн хэмжээгээр тохирно"):""};
   const sync=()=>{const p=x=>parseFloat(String(x.value).replace(",","."));
-    t.dose=a.value.trim()&&b.value.trim()?{from:p(a),to:p(b),step:st.value.trim()?p(st):0,unit:u.value.trim()||"мин"}:null; lockTimer()};
+    t.dose=a.value.trim()&&b.value.trim()?{from:p(a),to:p(b),step:st.value.trim()?p(st):0,unit:u.value.trim()||T("мин")}:null; lockTimer()};
   setTimeout(lockTimer,0);
   [a,b,st,u].forEach(i=>i.oninput=sync);
   const ar=document.createElement("span"); ar.textContent="→";
-  const pl=document.createElement("span"); pl.textContent="· 7 хоног тутам +";
+  const pl=document.createElement("span"); pl.textContent=T("· 7 хоног тутам +");
   w.append(a,ar,b,u,pl,st);
   return w;
 }
 // Habit stacking: "after ___" ties the new habit to something already done every day.
-const AFTER_IDEAS=["Сэрсний","Өглөөний цайны","Шүдээ угаасны","Ажлын","Үдийн хоолны","Оройн хоолны","Унтахын өмнө, шүдээ угаасны"];
+const AFTER_IDEAS=["Сэрсний","Өглөөний цайны","Шүдээ угаасны","Ажлын","Үдийн хоолны","Оройн хоолны","Унтахын өмнө, шүдээ угаасны"].map(x=>T(x));
 function afterEditor(t){
   const w=document.createElement("label"); w.className="fq after";
   w.innerHTML=`<span>🔗</span>`;
-  const i=document.createElement("input"); i.type="text"; i.maxLength=40; i.value=t.after||""; i.placeholder="Өглөөний цайны";
-  i.setAttribute("list","afterIdeas"); i.setAttribute("aria-label","Юуны дараа хийх: "+(t.name||"зүйл"));
+  const i=document.createElement("input"); i.type="text"; i.maxLength=40; i.value=t.after||""; i.placeholder=T("Өглөөний цайны");
+  i.setAttribute("list","afterIdeas"); i.setAttribute("aria-label",T("Юуны дараа хийх: {name}",{name:t.name||T("зүйл")}));
   i.oninput=()=>t.after=i.value;
-  const d=document.createElement("span"); d.textContent="дараа";
-  w.append(i,d); return w;
+  const d=document.createElement("span"); d.textContent=T("дараа");
+  if(LI()) w.append(d,i); else w.append(i,d);            // "after ___" in English/Czech, "___ дараа" in Mongolian
+  return w;
 }
 // How often: every day / N times a week / chosen weekdays
 function freqEditor(t){
   const w=document.createElement("div"); w.className="fq";
   const f=t.freq=normFreq(t.freq);
-  w.innerHTML=`<span>🔁</span><select aria-label="Давтамж: ${(t.name||"зүйл").replace(/[<>&"]/g,"")}"><option value="daily">Өдөр бүр</option><option value="week">7 хоногт N удаа</option><option value="days">Гарагаар</option></select>`;
+  w.innerHTML=`<span>🔁</span><select aria-label="${T("Давтамж")}: ${(t.name||T("зүйл")).replace(/[<>&"]/g,"")}"><option value="daily">${T("Өдөр бүр")}</option><option value="week">${T("7 хоногт N удаа")}</option><option value="days">${T("Гарагаар")}</option></select>`;
   const sel=w.querySelector("select"); sel.value=f.t;
   sel.onchange=()=>{t.freq=sel.value==="week"?{t:"week",n:3}:sel.value==="days"?{t:"days",d:[1,3,5]}:{t:"daily"}; w.replaceWith(freqEditor(t))};
   if(f.t==="week"){
-    const n=document.createElement("input"); n.type="number"; n.min="1"; n.max="6"; n.inputMode="numeric"; n.value=f.n; n.setAttribute("aria-label","7 хоногт хэдэн удаа");
+    const n=document.createElement("input"); n.type="number"; n.min="1"; n.max="6"; n.inputMode="numeric"; n.value=f.n; n.setAttribute("aria-label",T("7 хоногт хэдэн удаа"));
     n.oninput=()=>{const v=Math.round(+n.value); if(v>=1&&v<=6) t.freq={t:"week",n:v}};
-    const u=document.createElement("span"); u.textContent="удаа"; w.append(n,u);
+    const u=document.createElement("span"); u.textContent=T("удаа"); w.append(n,u);
   }
   if(f.t==="days") [1,2,3,4,5,6,0].forEach(d=>{
     const b=document.createElement("button"); b.type="button"; b.className="wdb"+(f.d.includes(d)?" on":""); b.textContent=WD_MON[(d+6)%7];
@@ -1694,7 +1772,7 @@ $("save").onclick=()=>{
   {const w=parseInt($("waterGoalIn").value,10); if(w>=0&&w<=20) cfg.waterGoal=w}
   store.set("elsen_cfg",cfg); lastRemCheck=-1; lastKey=dayKey(new Date());
   closeSettings(); drawBar(); renderTasks(); renderWeek(); tick(); sandSoundSync(); renderFoodShift(); renderPlan(); syncWaterTask();
-  toast("Хадгаллаа ✓");
+  toast(T("Хадгаллаа ✓"));
 };
 
 /* ---------- shift editor ---------- */
@@ -1706,9 +1784,9 @@ function renderShiftEdit(){
   const l=$("shiftList"); l.innerHTML="";
   S.list.forEach((x,i)=>{
     const b=document.createElement("div"); b.className="shbox";
-    b.innerHTML=`<div class="edit"><input type="text" class="nm" placeholder="Ээлжийн нэр" aria-label="Ээлжийн нэр"><button class="del" aria-label="Ээлж устгах">×</button></div>
-      <div class="row"><label>Ажил</label><div class="pair"><input type="time" data-f="workS" aria-label="Ажил эхлэх">–<input type="time" data-f="workE" aria-label="Ажил дуусах"></div></div>
-      <div class="row"><label>Унтах</label><div class="pair"><input type="time" data-f="sleepS" aria-label="Унтах">–<input type="time" data-f="sleepE" aria-label="Босох"></div></div>`;
+    b.innerHTML=`<div class="edit"><input type="text" class="nm" placeholder="${T("Ээлжийн нэр")}" aria-label="${T("Ээлжийн нэр")}"><button class="del" aria-label="${T("Ээлж устгах")}">×</button></div>
+      <div class="row"><label>${T("Ажил")}</label><div class="pair"><input type="time" data-f="workS" aria-label="${T("Ажил эхлэх")}">–<input type="time" data-f="workE" aria-label="${T("Ажил дуусах")}"></div></div>
+      <div class="row"><label>${T("Унтах")}</label><div class="pair"><input type="time" data-f="sleepS" aria-label="${T("Унтах")}">–<input type="time" data-f="sleepE" aria-label="${T("Босох")}"></div></div>`;
     const nm=b.querySelector(".nm"); nm.value=x.name; nm.oninput=e=>{x.name=e.target.value; renderShiftCur()};
     b.querySelectorAll("input[type=time]").forEach(t=>{t.value=x[t.dataset.f]; t.onchange=t.oninput=e=>{if(isHM(e.target.value))x[t.dataset.f]=e.target.value}});
     b.querySelector(".del").onclick=()=>{S.list.splice(i,1); if(S.cur>=S.list.length)S.cur=Math.max(0,S.list.length-1); renderShiftEdit()};
@@ -1718,10 +1796,10 @@ function renderShiftEdit(){
 }
 function renderShiftCur(){
   const S=shDraft, sel=$("shiftCur"); sel.innerHTML="";
-  S.list.forEach((x,i)=>{const o=document.createElement("option"); o.value=i; o.textContent=x.name||`${i+1}-р ээлж`; sel.appendChild(o)});
+  S.list.forEach((x,i)=>{const o=document.createElement("option"); o.value=i; o.textContent=x.name||T("{n}-р ээлж",{n:i+1}); sel.appendChild(o)});
   sel.value=S.cur;
   const order=S.list.map(x=>x.name||"…").join(" → ");
-  $("shiftNote").textContent=S.list.length>1?`Дараалал: ${order} → … Жагсаалтын дарааллаар ${S.every} хоног тутам солигдоно.`:"Хоёр ба түүнээс дээш ээлж нэмнэ үү.";
+  $("shiftNote").textContent=S.list.length>1?T("Дараалал: {order} → … Жагсаалтын дарааллаар {n} хоног тутам солигдоно.",{order,n:S.every}):T("Хоёр ба түүнээс дээш ээлж нэмнэ үү.");
 }
 $("shiftOn").onchange=e=>{shDraft.on=e.target.checked; if(shDraft.on&&!shDraft.list.length) shDraft.list=SHIFT_DEFAULT().list; renderShiftEdit()};
 $("addShift").onclick=()=>{shDraft.list.push({id:"s"+Date.now(),name:"",workS:"08:00",workE:"17:00",sleepS:"23:00",sleepE:"07:00"}); renderShiftEdit();
@@ -1788,15 +1866,15 @@ function swRenderLaps(){
   for(let i=d.length-1;i>=0;i--){
     const r=document.createElement("div"); const f=fmtSw(d[i]), tf=fmtSw(sw.laps[i]);
     r.className="lap"+(d[i]===best?" best":d[i]===worst?" worst":"");
-    r.innerHTML=`<span class="n">Тойрог ${i+1}</span><span class="tot">${tf.main}${tf.cs}</span><span class="d">${f.main}${f.cs}</span>`;
+    r.innerHTML=`<span class="n">${T("Тойрог {n}",{n:i+1})}</span><span class="tot">${tf.main}${tf.cs}</span><span class="d">${f.main}${f.cs}</span>`;
     box.appendChild(r);
   }
 }
 function swRender(){
   const go=$("swGo"), lap=$("swLap");
-  go.textContent=sw.run?"Зогсоох":(sw.acc?"Цааш":"Эхлэх");
+  go.textContent=T(sw.run?"Зогсоох":(sw.acc?"Цааш":"Эхлэх"));
   go.className="round "+(sw.run?"stop":"go");
-  lap.textContent=(!sw.run&&sw.acc)?"Шинэчлэх":"Тойрог";
+  lap.textContent=T((!sw.run&&sw.acc)?"sw:Шинэчлэх":"Тойрог");
   lap.disabled=!sw.run&&!sw.acc;
   if(typeof swRenderFor==="function") swRenderFor();
   swRenderLaps(); swDraw();
@@ -1837,19 +1915,19 @@ function renderNotif(){
   const n=$("notifNote"), b=$("notifBtn"), tst=$("notifTest");
   b.hidden=true; tst.hidden=true;
   if(!hasNotif){
-    n.textContent=isIOS&&!isStandalone()?"iPhone дээр мэдэгдэл авахын тулд эхлээд аппыг нүүр дэлгэцэнд суулгана уу (доорх заавар).":"Энэ браузер мэдэгдэл дэмжихгүй. Сануулга апп дотор гарна.";
-  } else if(Notification.permission==="granted"){ n.textContent="✓ Мэдэгдэл зөвшөөрөгдсөн."; tst.hidden=false; }
-  else if(Notification.permission==="denied"){ n.textContent="Мэдэгдэл хаагдсан байна. Утас/браузерын тохиргооноос «Элсэн цаг»-д зөвшөөрөл өгнө үү. Тэр болтол сануулга апп дотор гарна."; }
-  else { n.textContent="Таймер дуусах, сануулгын цаг болоход мэдэгдэл авахын тулд зөвшөөрнө үү."; b.hidden=false; }
+    n.textContent=T(isIOS&&!isStandalone()?"iPhone дээр мэдэгдэл авахын тулд эхлээд аппыг нүүр дэлгэцэнд суулгана уу (доорх заавар).":"Энэ браузер мэдэгдэл дэмжихгүй. Сануулга апп дотор гарна.");
+  } else if(Notification.permission==="granted"){ n.textContent=T("✓ Мэдэгдэл зөвшөөрөгдсөн."); tst.hidden=false; }
+  else if(Notification.permission==="denied"){ n.textContent=T("Мэдэгдэл хаагдсан байна. Утас/браузерын тохиргооноос «Элсэн цаг»-д зөвшөөрөл өгнө үү. Тэр болтол сануулга апп дотор гарна."); }
+  else { n.textContent=T("Таймер дуусах, сануулгын цаг болоход мэдэгдэл авахын тулд зөвшөөрнө үү."); b.hidden=false; }
 }
 $("notifBtn").onclick=()=>askNotify(true);
-$("notifTest").onclick=async()=>{unlockAudio(); chime(); if(!await notify("Элсэн цаг","Сануулга ингэж харагдана ⏳","test")) toast("Мэдэгдэл илгээж чадсангүй")};
+$("notifTest").onclick=async()=>{unlockAudio(); chime(); if(!await notify(T("Элсэн цаг"),T("Сануулга ингэж харагдана ⏳"),"test")) toast(T("Мэдэгдэл илгээж чадсангүй"))};
 function remEditor(t){
-  const l=document.createElement("label"); l.innerHTML=`<span>⏰ Сануулга</span>`;
+  const l=document.createElement("label"); l.innerHTML=`<span>⏰ ${T("Сануулга")}</span>`;
   const i=document.createElement("input"); i.type="time"; i.value=t.rem||"";
-  i.setAttribute("aria-label","Сануулгын цаг: "+(t.name||"зүйл"));
+  i.setAttribute("aria-label",T("Сануулгын цаг: {name}",{name:t.name||T("зүйл")}));
   // iPhone's time picker has no way to clear a value, so offer one.
-  const x=document.createElement("button"); x.type="button"; x.className="remclr"; x.textContent="×"; x.setAttribute("aria-label","Сануулга арилгах");
+  const x=document.createElement("button"); x.type="button"; x.className="remclr"; x.textContent="×"; x.setAttribute("aria-label",T("Сануулга арилгах"));
   const sync=()=>{x.hidden=!i.value};
   i.oninput=i.onchange=e=>{t.rem=e.target.value; sync()};
   x.onclick=e=>{e.preventDefault(); i.value=""; t.rem=""; sync(); i.focus()};
@@ -1873,12 +1951,12 @@ function checkReminders(){
   });
   if(!due.length&&!missed.length) return;
   store.set("elsen_notified",notified);
-  due.forEach(t=>notify("⏰ "+t.name,t.min?`${t.min} минутын таймераа эхлүүлэх цаг боллоо`:"Хийх цаг боллоо","rem-"+t.id));
+  due.forEach(t=>notify("⏰ "+t.name,t.min?T("{n} минутын таймераа эхлүүлэх цаг боллоо",{n:t.min}):T("Хийх цаг боллоо"),"rem-"+t.id));
   if(due.length){
     chime(); const t=due[0];
-    if(due.length===1&&t.min) toast(`⏰ ${t.name} · цаг боллоо`,"Эхлүүлэх",()=>timerToggle(t),15000);
-    else toast(`⏰ ${due.map(x=>x.name).join(", ")} · цаг боллоо`,null,null,15000);
-  } else toast(`${missed.length} зүйлийн сануулгын цаг өнгөрсөн байна`);
+    if(due.length===1&&t.min) toast(`⏰ ${t.name} · ${T("цаг боллоо")}`,T("Эхлүүлэх"),()=>timerToggle(t),15000);
+    else toast(`⏰ ${due.map(x=>x.name).join(", ")} · ${T("цаг боллоо")}`,null,null,15000);
+  } else toast(T("{n} зүйлийн сануулгын цаг өнгөрсөн байна",{n:missed.length}));
   updateTaskTimers();
 }
 const _openSettings=openSettings;
@@ -1889,23 +1967,23 @@ $("openSet").onclick=openSettings;
 function swRenderFor(){
   if(sw.task&&!cfg.tasks.some(t=>t.id===sw.task)) sw.task="";
   const f=$("swFor"); f.innerHTML="";
-  [{id:"",name:"Ерөнхий"},...cfg.tasks].forEach(t=>{
+  [{id:"",name:T("Ерөнхий")},...cfg.tasks].forEach(t=>{
     const c=document.createElement("button"); c.className="chip"+((sw.task||"")===t.id?" on":"");
     c.textContent=t.name; c.disabled=!!sw.run&&(sw.task||"")!==t.id;
     c.onclick=()=>{if(sw.run)return; sw.task=t.id; swSave(); swRender()};
     f.appendChild(c);
   });
-  $("swLabel").textContent=sw.task?"Хугацаа энэ зүйлд бүртгэгдэнэ":"Секундомер · аль зүйлд зарцуулахаа сонгож болно";
+  $("swLabel").textContent=T(sw.task?"Хугацаа энэ зүйлд бүртгэгдэнэ":"Секундомер · аль зүйлд зарцуулахаа сонгож болно");
 }
 function swCredit(ms){
   const t=sw.task&&cfg.tasks.find(x=>x.id===sw.task); if(!t||ms<=0) return;
   const k=dayKey(new Date()), s=tmGet(k,t.id); s.acc+=ms;
-  if(t.min>0&&!s.run&&tmProg(s)>=t.min*60000&&!(hist[k]||{})[t.id]){completeTask(k,t.id,new Date()); toast(`${t.name} биеллээ ✓`)}
+  if(t.min>0&&!s.run&&tmProg(s)>=t.min*60000&&!(hist[k]||{})[t.id]){completeTask(k,t.id,new Date()); toast(T("{name} биеллээ ✓",{name:t.name}))}
   saveTm(); renderTasks(); renderWeek();
 }
 
 /* ---------- monthly stats ---------- */
-const WD_FULL=["Ням","Даваа","Мягмар","Лхагва","Пүрэв","Баасан","Бямба"];
+const WD_FULL=LI()?wdNames("long"):["Ням","Даваа","Мягмар","Лхагва","Пүрэв","Баасан","Бямба"];
 const keyOf=(y,m,d)=>`${y}-${pad(m+1)}-${pad(d)}`;
 let statY=null, statM=null, statSel=null;
 function firstUseKey(){
@@ -1930,7 +2008,7 @@ function renderStats(){
   if(statY===null){statY=ty;statM=tmo-1}
   const y=statY, m=statM, nDays=new Date(y,m+1,0).getDate();
   const [fy,fm]=first.split("-").map(Number);
-  $("mTitle").textContent=`${y} оны ${MONTHS[m]}`;
+  $("mTitle").textContent=fmtYM(y,m);
   $("mPrev").disabled=y*12+m<=fy*12+fm-1;
   $("mNext").disabled=y*12+m>=ty*12+tmo-1;
 
@@ -1940,14 +2018,14 @@ function renderStats(){
   let delta="";
   if(prev.counted.length>=7&&counted.length){
     const d=avg-prev.avg;
-    delta=`<div class="delta">${d>0?`▲ ${d}% <span>өмнөх сараас</span>`:d<0?`▼ ${-d}% <span>өмнөх сараас</span>`:`<span>Өмнөх сартай ижил</span>`}</div>`;
+    delta=`<div class="delta">${d>0?`▲ ${d}% <span>${T("өмнөх сараас")}</span>`:d<0?`▼ ${-d}% <span>${T("өмнөх сараас")}</span>`:`<span>${T("Өмнөх сартай ижил")}</span>`}</div>`;
   }
   const rm=Math.round(mins);
   $("tiles").innerHTML=
-    tile("Бүрэн өдөр",full,`/ ${counted.length} өдөр`)+
-    tile("Дундаж биелэлт",avg,"%",delta)+
-    tile("Зарцуулсан цаг",rm>=60?Math.floor(rm/60):rm,rm>=60?`ц ${rm%60}м`:"мин")+
-    tile("Урт дараалал",best,"өдөр");
+    tile(T("Бүрэн өдөр"),full,"/ "+T("{n} өдөр",{n:counted.length}))+
+    tile(T("Дундаж биелэлт"),avg,"%",delta)+
+    tile(T("Зарцуулсан цаг"),rm>=60?Math.floor(rm/60):rm,rm>=60?T("ц {m}м",{m:rm%60}):T("мин"))+
+    tile(T("Урт дараалал"),best,T("өдөр",{n:best}));
 
   // which weekday goes best / worst (needs at least two weeks of data)
   const wk=[0,1,2,3,4,5,6].map(()=>({s:0,n:0}));
@@ -1958,8 +2036,8 @@ function renderStats(){
   const parts=[], n=ranked.length;
   if(n>=5&&ranked[0].p-ranked[n-1].p>=0.1){
     const hi=ranked[0], lo=ranked[n-1];
-    if(hi.p-ranked[1].p>=0.05) parts.push(`<span>💪 Хамгийн сайн: <b>${WD_FULL[hi.i]}</b> ${Math.round(hi.p*100)}%</span>`);
-    if(ranked[n-2].p-lo.p>=0.05) parts.push(`<span>🌱 Анхаарах: <b>${WD_FULL[lo.i]}</b> ${Math.round(lo.p*100)}%</span>`);
+    if(hi.p-ranked[1].p>=0.05) parts.push(`<span>💪 ${T("Хамгийн сайн")}: <b>${WD_FULL[hi.i]}</b> ${Math.round(hi.p*100)}%</span>`);
+    if(ranked[n-2].p-lo.p>=0.05) parts.push(`<span>🌱 ${T("Анхаарах")}: <b>${WD_FULL[lo.i]}</b> ${Math.round(lo.p*100)}%</span>`);
   }
   ins.innerHTML=parts.join(""); ins.hidden=!parts.length;
 
@@ -1969,10 +2047,10 @@ function renderStats(){
   for(let i=0;i<lead;i++) cal.appendChild(document.createElement("span"));
   days.forEach(x=>{
     const b=document.createElement("button"); b.textContent=x.d;
-    if(!x.on){b.className="off"; b.disabled=true; b.setAttribute("aria-label",`${x.d}: мэдээлэл байхгүй`)}
+    if(!x.on){b.className="off"; b.disabled=true; b.setAttribute("aria-label",`${x.d}: ${T("мэдээлэл байхгүй")}`)}
     else{
       const s=x.s; b.className="l"+levelOf(s.c,s.tot)+(x.k===today?" today":"");
-      const lab=`${MONTHS[m]}ын ${x.d}: ${s.c}/${s.tot} биелсэн`; b.title=lab; b.setAttribute("aria-label",lab);
+      const lab=`${fmtMD(new Date(y,m,x.d))}: ${T("{c}/{t} биелсэн",{c:s.c,t:s.tot})}`; b.title=lab; b.setAttribute("aria-label",lab);
       b.onclick=()=>{statSel=x.k; renderStats()};
     }
     cal.appendChild(b);
@@ -1984,8 +2062,8 @@ function renderStats(){
   if(statSel){
     const [sy,sm,sd]=statSel.split("-").map(Number), wd=new Date(sy,sm-1,sd).getDay();
     const s=scoreFor(statSel), done=hist[statSel]||{}, ids=idsOn(statSel), dmin=dayMinutes(statSel);
-    const nameOf=id=>{const t=taskById(id);return t?t.name:"(устгасан зүйл)"};
-    info.innerHTML=`<div class="dh"><b>${MONTHS[sm-1]}ын ${sd}, ${WD_FULL[wd]}</b><span>${s.c}/${s.tot}${dmin>=1?` · ⏱ ${fmtDur(dmin)}`:""}</span></div><div class="dx"></div>`;
+    const nameOf=id=>{const t=taskById(id);return t?t.name:T("(устгасан зүйл)")};
+    info.innerHTML=`<div class="dh"><b>${fmtMD(new Date(sy,sm-1,sd))}, ${WD_FULL[wd]}</b><span>${s.c}/${s.tot}${dmin>=1?` · ⏱ ${fmtDur(dmin)}`:""}</span></div><div class="dx"></div>`;
     const dx=info.querySelector(".dx"); dayExtras(statSel).forEach(x=>{const e=document.createElement("span"); e.textContent=x; dx.appendChild(e)});
     ids.forEach(id=>{
       const r=document.createElement("div"); r.className="di "+(done[id]?"ok":"no");
@@ -1996,14 +2074,14 @@ function renderStats(){
       r.querySelector(".at").textContent=[done[id]||"",mm>=1?fmtDur(mm):"",q?`${fmtQ(q)} ${u}`.trim():""].filter(Boolean).join(" · ");
       info.appendChild(r);
     });
-  } else info.innerHTML=`<div class="empty">Өдөр дээр дарж дэлгэрэнгүйг харна уу</div>`;
+  } else info.innerHTML=`<div class="empty">${T("Өдөр дээр дарж дэлгэрэнгүйг харна уу")}</div>`;
   // mark the selected day (statSel may have been defaulted above)
   cal.querySelectorAll("button").forEach((b,i)=>{const x=days[i]; if(x) b.classList.toggle("sel",x.on&&x.k===statSel)});
 
   renderMore(counted,today); renderWeekStat();
   // per task
   const pt=$("perTask"); pt.innerHTML="";
-  if(!counted.length){pt.innerHTML=`<div class="empty">Энэ сард бүртгэл алга</div>`; return}
+  if(!counted.length){pt.innerHTML=`<div class="empty">${T("Энэ сард бүртгэл алга")}</div>`; return}
   [...cfg.tasks,...cfg.archive].forEach(t=>{
     let have=0,did=0,tmin=0,qsum=0,qdays=0,rests=0;
     const wkly=(t.freq||{}).t==="week", weeks={};
@@ -2019,14 +2097,14 @@ function renderStats(){
     const pct=Math.round(did/have*100);
     const r=document.createElement("div"); r.className="pt";
     const live=!t.archived, cur=live?streakOf(t,today):0, best=bestStreakOf(t), pd=pathDay(t,today);
-    const facts=[cur?`🔥 ${cur} одоо`:"",best?`хамгийн урт ${best}`:"",live?(pd>=PATH?"66 хоног ✓":`зам ${pd}/${PATH}`):"",
-      (t.freq||{}).t!=="daily"&&t.freq?freqText(t.freq):"",rests?`☾ ${rests} амарсан`:"",
+    const facts=[cur?"🔥 "+T("{n} одоо",{n:cur}):"",best?T("хамгийн урт {n}",{n:best}):"",live?(pd>=PATH?T("66 хоног ✓"):T("зам {a}/{b}",{a:pd,b:PATH})):"",
+      (t.freq||{}).t!=="daily"&&t.freq?freqText(t.freq):"",rests?"☾ "+T("{n} амарсан",{n:rests}):"",
       t.dose&&live?`📈 ${fmtQ(doseNow(t,today))}/${fmtQ(t.dose.to)} ${t.dose.unit}`:""].filter(Boolean).join(" · ");
-    r.innerHTML=`<div class="r1"><span class="nm"></span><span class="n"><b>${did}</b>/${have}${wkly?" удаа":""} · ${pct}%</span></div><div class="bar2"><i style="width:${pct}%"></i></div>`+
+    r.innerHTML=`<div class="r1"><span class="nm"></span><span class="n"><b>${did}</b>/${have}${wkly?" "+T("удаа"):""} · ${pct}%</span></div><div class="bar2"><i style="width:${pct}%"></i></div>`+
       (facts?`<div class="r2 hb"></div>`:"")+
-      (tmin>=1?`<div class="r2">⏱ Нийт ${fmtDur(tmin)} зарцуулсан</div>`:"")+
-      (qsum?`<div class="r2 q">📏 Нийт <b>${fmtQ(qsum)}</b> <span class="u"></span> · ${qdays} өдөр</div>`:"");
-    r.querySelector(".nm").textContent=t.name+(t.archived?" · архив":"");
+      (tmin>=1?`<div class="r2">⏱ ${T("Нийт {d} зарцуулсан",{d:fmtDur(tmin)})}</div>`:"")+
+      (qsum?`<div class="r2 q">📏 ${T("Нийт")} <b>${fmtQ(qsum)}</b> <span class="u"></span> · ${T("{n} өдөр",{n:qdays})}</div>`:"");
+    r.querySelector(".nm").textContent=t.name+(t.archived?" · "+T("архив"):"");
     if(facts) r.querySelector(".hb").textContent=facts;
     if(qsum) r.querySelector(".u").textContent=t.unit||"";
     pt.appendChild(r);
@@ -2042,21 +2120,21 @@ function weekData(mon){
   return {days,on,pct:tot?Math.round(c/tot*100):null,full:on.filter(d=>d.s.tot&&d.s.c===d.s.tot).length};
 }
 function renderWeekReport(box,mon){
-  const W=weekData(mon), WDm=["Да","Мя","Лх","Пү","Ба","Бя","Ня"], end=dayDate(addDays(mon,6)), st=dayDate(mon);
-  const range=`${MONTHS[st.getMonth()]}ын ${st.getDate()} – ${st.getMonth()===end.getMonth()?"":MONTHS[end.getMonth()]+"ын "}${end.getDate()}`;
-  if(!W.on.length||W.pct===null){box.innerHTML=`<div class="wh"><b>${range}</b></div><div class="empty">Энэ 7 хоногт бүртгэл алга</div>`; return}
+  const W=weekData(mon), WDm=WD_MON, end=dayDate(addDays(mon,6)), st=dayDate(mon);
+  const range=LI()?`${fmtMD(st)} – ${fmtMD(end)}`:`${MONTHS[st.getMonth()]}ын ${st.getDate()} – ${st.getMonth()===end.getMonth()?"":MONTHS[end.getMonth()]+"ын "}${end.getDate()}`;
+  if(!W.on.length||W.pct===null){box.innerHTML=`<div class="wh"><b>${range}</b></div><div class="empty">${T("Энэ 7 хоногт бүртгэл алга")}</div>`; return}
   const P=weekData(addDays(mon,-7));
-  let delta=""; if(P.pct!=null&&P.on.length>=4){const d=W.pct-P.pct; delta=d>0?` · ▲ ${d}% өмнөх 7 хоногоос`:d<0?` · ▼ ${-d}% өмнөх 7 хоногоос`:" · өмнөхтэй ижил"}
-  let h=`<div class="wh"><b>${range}</b><b>${W.on.length}/7 өдөр</b></div>
-    <div class="big">${W.pct}%<small>биелэлт${delta}</small></div><div class="wbars">`;
+  let delta=""; if(P.pct!=null&&P.on.length>=4){const d=W.pct-P.pct; delta=d>0?` · ▲ ${d}% ${T("өмнөх 7 хоногоос")}`:d<0?` · ▼ ${-d}% ${T("өмнөх 7 хоногоос")}`:" · "+T("өмнөхтэй ижил")}
+  let h=`<div class="wh"><b>${range}</b><b>${W.on.length}/7 ${T("өдөр")}</b></div>
+    <div class="big">${W.pct}%<small>${T("биелэлт")}${delta}</small></div><div class="wbars">`;
   W.days.forEach(d=>{const r=d.s.tot?d.s.c/d.s.tot:0;
     h+=`<div title="${WD_FULL[(d.i+1)%7]}: ${d.s.c}/${d.s.tot}"><i class="${!d.on?"none":r>=1?"full":""}" style="height:${d.on?Math.max(3,Math.round(r*36)):3}px"></i><span>${WDm[d.i]}</span></div>`});
   h+=`</div>`;
   const lines=[];
   // best day
   const rated=W.on.filter(d=>d.s.tot&&d.s.c), best=rated.sort((a,b)=>b.s.c/b.s.tot-a.s.c/a.s.tot||b.s.c-a.s.c)[0];
-  if(W.full>1) lines.push(["🏆",`<b>${W.full}</b> өдөр бүгдийг биелүүлсэн`]);
-  else if(best) lines.push(["🏆",`Хамгийн сайн өдөр: <b>${WD_FULL[(best.i+1)%7]}</b> <em>${best.s.c}/${best.s.tot}</em>`]);
+  if(W.full>1) lines.push(["🏆",T("<b>{n}</b> өдөр бүгдийг биелүүлсэн",{n:W.full})]);
+  else if(best) lines.push(["🏆",`${T("Хамгийн сайн өдөр")}: <b>${WD_FULL[(best.i+1)%7]}</b> <em>${best.s.c}/${best.s.tot}</em>`]);
   // weakest task (lowest share of the days it was on the list)
   const per={}; W.on.forEach(d=>{idsOn(d.k).forEach(id=>{const p=per[id]||(per[id]={n:0,c:0}); p.n++; if((hist[d.k]||{})[id])p.c++})});
   // "N a week" habits: measured against N, not against the days they happened to be done
@@ -2064,14 +2142,14 @@ function renderWeekReport(box,mon){
     const n=Math.min(t.freq.n,days.length); per[t.id]={n,c:Math.min(n,days.filter(d=>doneOn(t,d.k)).length)}});
   const nameOf=id=>{const t=taskById(id);return t?t.name:null};
   const weak=Object.entries(per).filter(([id,p])=>nameOf(id)&&p.c<p.n).sort((a,b)=>a[1].c/a[1].n-b[1].c/b[1].n)[0];
-  if(weak) lines.push(["🌱",`Сул даалгавар: <b class="nm" data-id="${weak[0]}"></b> <em>${weak[1].c}/${weak[1].n} ${((taskById(weak[0])||{}).freq||{}).t==="week"?"удаа":"өдөр"}</em>`]);
-  else lines.push(["🎉","Бүх даалгаврыг өдөр бүр биелүүлсэн"]);
+  if(weak) lines.push(["🌱",`${T("Сул дадал")}: <b class="nm" data-id="${weak[0]}"></b> <em>${weak[1].c}/${weak[1].n} ${T(((taskById(weak[0])||{}).freq||{}).t==="week"?"удаа":"өдөр")}</em>`]);
+  else lines.push(["🎉",T("Бүх дадлыг өдөр бүр биелүүлсэн")]);
   // amounts logged
   [...cfg.tasks,...cfg.archive].filter(t=>t.unit).forEach(t=>{const sum=W.on.reduce((a,d)=>a+((qty[d.k]||{})[t.id]||0),0);
     if(sum) lines.push(["📏",`<b class="nm" data-id="${t.id}"></b>: ${fmtQ(sum)} <span class="u" data-id="${t.id}"></span>`])});
-  const sl=W.on.filter(d=>sleepLog[d.k]); if(sl.length) lines.push(["😴",`Нойр дунджаар <b>${fmtDur(sl.reduce((a,d)=>a+sleepMin(sleepLog[d.k]),0)/sl.length)}</b> <em>${sl.length} шөнө</em>`]);
-  const wa=W.on.filter(d=>water[d.k]); if(wa.length) lines.push(["💧",`Ус дунджаар <b>${(wa.reduce((a,d)=>a+water[d.k],0)/wa.length).toFixed(1).replace(/\.0$/,"")}</b> аяга`]);
-  const rv=W.on.filter(d=>review[d.k]); if(rv.length) lines.push(["⭐",`Өдрийн үнэлгээ <b>${(rv.reduce((a,d)=>a+review[d.k].r,0)/rv.length).toFixed(1)}</b> / 5`]);
+  const sl=W.on.filter(d=>sleepLog[d.k]); if(sl.length) lines.push(["😴",`${T("Нойр дунджаар")} <b>${fmtDur(sl.reduce((a,d)=>a+sleepMin(sleepLog[d.k]),0)/sl.length)}</b> <em>${T("{n} шөнө",{n:sl.length})}</em>`]);
+  const wa=W.on.filter(d=>water[d.k]); if(wa.length) lines.push(["💧",`${T("Ус дунджаар")} <b>${(wa.reduce((a,d)=>a+water[d.k],0)/wa.length).toFixed(1).replace(/\.0$/,"")}</b> ${T("аяга")}`]);
+  const rv=W.on.filter(d=>review[d.k]); if(rv.length) lines.push(["⭐",`${T("Өдрийн үнэлгээ")} <b>${(rv.reduce((a,d)=>a+review[d.k].r,0)/rv.length).toFixed(1)}</b> / 5`]);
   h+=lines.map(([i,t])=>`<div class="wl"><span class="ic">${i}</span><span>${t}</span></div>`).join("");
   box.innerHTML=h;
   box.querySelectorAll(".nm").forEach(e=>e.textContent=nameOf(e.dataset.id));      // names are user text: never as HTML
@@ -2094,7 +2172,7 @@ function renderWeekDay(){
   if(end-Date.now()<=4*3600000&&store.get("elsen_week_sent","")!==mon){
     store.set("elsen_week_sent",mon);
     const W=weekData(mon);
-    if(W.pct!==null) notify("7 хоногийн тайлан",`Энэ 7 хоногийн биелэлт ${W.pct}%. ${W.full} өдөр бүгдийг биелүүлсэн.`,"week");
+    if(W.pct!==null) notify(T("7 хоногийн тайлан"),T("Энэ 7 хоногийн биелэлт {p}%. {n} өдөр бүгдийг биелүүлсэн.",{p:W.pct,n:W.full}),"week");
   }
 }
 
@@ -2102,7 +2180,7 @@ function renderWeekDay(){
 function dayExtras(k){
   const out=[];
   if(sleepLog[k]) out.push(`😴 ${fmtDur(sleepMin(sleepLog[k]))} (${sleepLog[k].s}–${sleepLog[k].w})`);
-  if(water[k]) out.push(`💧 ${water[k]} аяга ус`);
+  if(water[k]) out.push("💧 "+T("{n} аяга ус",{n:water[k]}));
   if(review[k]) out.push(`${RATES[review[k].r-1][0]} ${review[k].r}/5`+(review[k].n?` · «${review[k].n}»`:""));
   return out;
 }
@@ -2110,19 +2188,19 @@ function dayExtras(k){
 function renderMore(counted,today){
   const tiles=[], tile=(k,v,sub)=>`<div class="tile"><div class="k">${k}</div><div class="v">${v}${sub?`<small>${sub}</small>`:""}</div></div>`;
   const wd=counted.filter(x=>water[x.k]);
-  if(wd.length) tiles.push(tile("Ус · өдрийн дундаж",(wd.reduce((a,x)=>a+water[x.k],0)/wd.length).toFixed(1).replace(/\.0$/,""),"аяга"));
+  if(wd.length) tiles.push(tile(T("Ус · өдрийн дундаж"),(wd.reduce((a,x)=>a+water[x.k],0)/wd.length).toFixed(1).replace(/\.0$/,""),T("аяга")));
   const sd=counted.filter(x=>sleepLog[x.k]);
   if(sd.length){const m=Math.round(sd.reduce((a,x)=>a+sleepMin(sleepLog[x.k]),0)/sd.length);
-    tiles.push(tile("Нойр · дундаж",Math.floor(m/60),`ц ${m%60}м · ${sd.length} шөнө`))}
+    tiles.push(tile(T("Нойр · дундаж"),Math.floor(m/60),T("ц {m}м",{m:m%60})+" · "+T("{n} шөнө",{n:sd.length})))}
   const rd=counted.filter(x=>review[x.k]);
-  if(rd.length) tiles.push(tile("Өдрийн үнэлгээ",(rd.reduce((a,x)=>a+review[x.k].r,0)/rd.length).toFixed(1),`/ 5 · ${rd.length} өдөр`));
+  if(rd.length) tiles.push(tile(T("Өдрийн үнэлгээ"),(rd.reduce((a,x)=>a+review[x.k].r,0)/rd.length).toFixed(1),"/ 5 · "+T("{n} өдөр",{n:rd.length})));
   $("moreTiles").innerHTML=tiles.join(""); $("moreSec").hidden=!tiles.length;
 }
 $("mPrev").onclick=()=>{if(--statM<0){statM=11;statY--} statSel=null; renderStats()};
 $("mNext").onclick=()=>{if(++statM>11){statM=0;statY++} statSel=null; renderStats()};
 
 /* ---------- food + fitness ---------- */
-const QUICK=["Үхрийн мах","Хонины мах","Тахианы мах","Загас","Өндөг","Сүү","Тараг","Ааруул","Будаа","Гурил","Гоймон","Овъёос","Төмс","Лууван","Байцаа","Сонгино","Буурцаг","Алим","Банана","Талх"];
+const QUICK=LI()?["Үхрийн мах","Хонины мах","Тахианы мах","Загас","Өндөг","Сүү","Тараг","Ааруул","Будаа","Гурил","Гоймон","Овъёос","Төмс","Лууван","Байцаа","Сонгино","Буурцаг","Алим","Банана","Талх"].map(x=>T(x)):["Үхрийн мах","Хонины мах","Тахианы мах","Загас","Өндөг","Сүү","Тараг","Ааруул","Будаа","Гурил","Гоймон","Овъёос","Төмс","Лууван","Байцаа","Сонгино","Буурцаг","Алим","Банана","Талх"];
 let pantry=store.get("elsen_pantry",[]);
 if(!Array.isArray(pantry)) pantry=[]; pantry=pantry.filter(x=>typeof x==="string");
 let foodCfg=Object.assign({goal:"Эрүүл хооллолт",ppl:"1",shift:"Өглөөний ээлж",note:""},store.get("elsen_foodcfg",{}));
@@ -2134,7 +2212,7 @@ function renderPantry(){
   pantry.forEach((it,i)=>{
     const c=document.createElement("span"); c.className="pchip";
     const s=document.createElement("span"); s.textContent=it;
-    const b=document.createElement("button"); b.textContent="×"; b.setAttribute("aria-label","Хасах");
+    const b=document.createElement("button"); b.textContent="×"; b.setAttribute("aria-label",T("Хасах"));
     b.onclick=()=>{pantry.splice(i,1); store.set("elsen_pantry",pantry); renderPantry()};
     c.append(s,b); p.appendChild(c);
   });
@@ -2160,7 +2238,7 @@ $("pIn").onkeydown=e=>{if(e.key==="Enter")addPantry()};
   $(id).onchange=()=>{foodCfg[id]=$(id).value; store.set("elsen_foodcfg",foodCfg)};
 });
 
-const PLAN_DAYS=["Даваа","Мягмар","Лхагва","Пүрэв","Баасан","Бямба","Ням"];
+const PLAN_DAYS=[1,2,3,4,5,6,0].map(i=>WD_FULL[i]);
 const MEAL_LABELS={
   "Өглөөний ээлж":["Өглөө · 06:15","Өдөр · 12:00","Орой · 19:00","Зууш"],
   "Оройн ээлж":["Өглөө · 09:00","Ажлын өмнө · 13:30","Ажил дээр · 19:30","Зууш"],
@@ -2173,11 +2251,12 @@ const MEAL_KEYS=["breakfast","lunch","dinner","snack"];
    preferring dishes that use what is already at home. */
 function fallbackPlan(o){
   o=o||{}; const pan=(o.pantry||[]).map(s=>s.toLowerCase());
-  const has=k=>pan.some(p=>p.includes(k));
+  // keywords are Mongolian stems; the same stem in the chosen language matches too
+  const has=k=>{const kk=T(k).toLowerCase(); return pan.some(p=>p.includes(k)||p.includes(kk))};
   const note=(o.note||"").toLowerCase();
-  const neg=/идэхгүй|хэрэггүй|харшил|үгүй|биш|болохгүй/.test(note);
-  const banned=neg?note.split(/[^а-яөүё]+/i).filter(w=>w.length>3).map(w=>w.slice(0,4)):[];
-  const ok=m=>!banned.some(b=>(m.n+" "+m.k.join(" ")).toLowerCase().includes(b));
+  const neg=/идэхгүй|хэрэггүй|харшил|үгүй|биш|болохгүй|\bno\b|\bnot\b|without|allerg|don't|\bbez\b|\bne\b|nejím|alergi/.test(note);
+  const banned=neg?note.split(/[^\p{L}]+/u).filter(w=>w.length>3).map(w=>w.slice(0,4)):[];
+  const ok=m=>!banned.some(b=>(m.n+" "+T(m.n)+" "+m.k.join(" ")).toLowerCase().includes(b));
   const B=[
     {n:"Овъёосны будаа сүүтэй, алим, самартай",k:["овъёос","сүү"],l:1},
     {n:"Чанасан өндөг 2, бүхэл үрийн талх, ногоон салат",k:["өндөг","талх"],l:1},
@@ -2209,21 +2288,21 @@ function fallbackPlan(o){
   const rank=list=>list.filter(ok).map((m,i)=>({m,s:m.k.filter(has).length*2+(light&&m.l?1:0)-i*0.01}))
     .sort((a,b)=>b.s-a.s).map(x=>x.m);
   const b=rank(B), m=rank(M), s=rank(S);
-  const pick=(arr,i)=>arr.length?arr[i%arr.length].n:"Өөрийн дуртай эрүүл хоол";
-  const extra=o.goal==="Булчин нэмэх"?" + нэмэлт уураг (өндөг/тараг)":light?" (жижиг порц)":"";
+  const pick=(arr,i)=>T(arr.length?arr[i%arr.length].n:"Өөрийн дуртай эрүүл хоол");
+  const extra=T(o.goal==="Булчин нэмэх"?" + нэмэлт уураг (өндөг/тараг)":light?" (жижиг порц)":"");
   const W={
     "Жин хасах":[["Хурдан алхах 40 мин","Суниах 10 мин"],["HIIT 20 мин","Суниах 3×20"],["Гүйх 30 мин"],["Амралт: хөнгөн алхалт 20 мин"],["Гүйх 30 мин","Планк 3×40 сек"],["Дугуй эсвэл уул авирах 45 мин"],["Амралт, сунгалт 15 мин"]],
     "Булчин нэмэх":[["Түлхэх: суниах 4×15","Дипс 3×10"],["Татах: суниалт/тэнхлэг 4×8","Ёроол 3×12"],["Хөл: суулт 4×20","Довтлох 3×12"],["Амралт, сунгалт"],["Бүх бие: бөрпи 3×10","Суниах 3×20"],["Хөл, гэдэс: суулт 4×25","Планк 3×60 сек"],["Амралт"]],
     "Эрч хүч нэмэх":[["Өглөөний гүйлт 20 мин"],["Йог/сунгалт 20 мин"],["Гүйх 30 мин"],["Алхах 30 мин"],["HIIT 15 мин"],["Байгальд алхах 60 мин"],["Амралт, амьсгалын дасгал 10 мин"]],
     "Эрүүл хооллолт":[["Гүйх 30 мин"],["Суниах 3×20","Суулт 3×20"],["Алхах 40 мин"],["Сунгалт 20 мин"],["Гүйх 30 мин"],["Идэвхтэй амралт: дугуй, сагсан бөмбөг"],["Амралт"]]
   };
-  const wk=W[o.goal]||W["Эрүүл хооллолт"];
+  const wk=(W[o.goal]||W["Эрүүл хооллолт"]).map(d=>d.map(x=>T(x)));
   const days=PLAN_DAYS.map((d,i)=>({day:d,breakfast:pick(b,i),lunch:pick(m,i*2)+extra,dinner:pick(m,i*2+1),snack:pick(s,i),workout:wk[i]}));
   const uses=(o.pantry||[]).map(item=>{
     const k=item.toLowerCase(), hit=[];
     days.forEach(d=>MEAL_KEYS.forEach(mk=>{if(hit.length<3){const t=d[mk].toLowerCase();
       if(k.split(/\s+/).some(w=>w.length>2&&t.includes(w.slice(0,Math.max(3,w.length-2))))&&!hit.includes(d.day))hit.push(d.day)}}));
-    return {item,how:hit.length?[...new Set(hit)].join(", ")+" гаригт ашиглана":"Энэ 7 хоногт ороогүй. Зууш эсвэл нэмэлт болгон ашиглаарай"};
+    return {item,how:hit.length?T("{days} гаригт ашиглана",{days:[...new Set(hit)].join(", ")}):T("Энэ 7 хоногт ороогүй. Зууш эсвэл нэмэлт болгон ашиглаарай")};
   });
   const tips={
     "Жин хасах":["Оройн хоолоо унтахаас 3 цагийн өмнө идээрэй","Таваг дээрх ногоог хоолны тэн хагаст хүргээрэй","Чихэртэй ундааг усаар солиорой"],
@@ -2231,10 +2310,10 @@ function fallbackPlan(o){
     "Эрч хүч нэмэх":["Өглөөний цайгаа алгасахгүй","Өдөрт 2 литр ус уугаарай","Чихэр биш, бүхэл үр тариа сонгоорой"],
     "Эрүүл хооллолт":["Өдөрт 5 янзын өнгөтэй ногоо, жимс идэхийг хичээгээрэй","Давс, тосыг багасгаарай","Хоолоо тогтмол цагт идээрэй"]
   }[o.goal]||[];
-  const t=[...tips];
-  if(o.night||o.shift==="Шөнийн ээлж") t.push("Шөнийн ээлжинд хүнд хоолноос зайлсхийж, хөнгөн зууш авч яваарай");
-  if(+o.ppl>1) t.push(`${o.ppl} хүнд: орцыг ${o.ppl} дахин нэмээрэй`);
-  if(o.note) t.push("Нэмэлт хүсэлтийг офлайн горимд бүрэн тооцох боломжгүй. Тохирохгүй хоолыг өөрөө сольж болно");
+  const t=tips.map(x=>T(x));
+  if(o.night||o.shift==="Шөнийн ээлж") t.push(T("Шөнийн ээлжинд хүнд хоолноос зайлсхийж, хөнгөн зууш авч яваарай"));
+  if(+o.ppl>1) t.push(T("{n} хүнд: орцыг {n} дахин нэмээрэй",{n:o.ppl}));
+  if(o.note) t.push(T("Нэмэлт хүсэлтийг офлайн горимд бүрэн тооцох боломжгүй. Тохирохгүй хоолыг өөрөө сольж болно"));
   return {days,uses,tips:t};
 }
 
@@ -2254,6 +2333,16 @@ async function getSample(){
   return null;
 }
 function planPrompt(o){
+  if(LI()) return `You are a nutritionist and fitness coach. Write a 7-day meal and exercise plan in ${["","English","Czech"][LI()]}.
+Goal: ${T(o.goal)}. People: ${o.ppl}. Work shift: ${T(o.shift)}.${o.shiftDetail?`
+This week's shifts (fit meal times to each day's shift): ${o.shiftDetail}.`:""}
+Food at home: ${o.pantry.length?o.pantry.join(", "):"(list is empty)"}.
+Extra wishes: ${o.note||"none"}.
+Use the food at home as much as possible and suggest simple home cooking.
+Return JSON only, no other text:
+{"days":[{"day":"${PLAN_DAYS[0]}","breakfast":"...","lunch":"...","dinner":"...","snack":"...","workout":["...","..."]}, ... 7 days ${PLAN_DAYS[0]} to ${PLAN_DAYS[6]}],
+ "uses":[{"item":"food at home","how":"how and on which day to use it"}],
+ "tips":["short tip", "..."]}`;
   return `Чи хоол зүйч, фитнес дасгалжуулагч. Монгол хэлээр 7 хоногийн хоол ба дасгалын хөтөлбөр гарга.
 Зорилго: ${o.goal}. Хүний тоо: ${o.ppl}. Ажлын ээлж: ${o.shift}.${o.shiftDetail?`
 Энэ 7 хоногийн ээлж (хоолны цагийг өдөр бүрийн ээлжид тааруул): ${o.shiftDetail}.`:""}
@@ -2268,12 +2357,12 @@ function planPrompt(o){
 $("gen").onclick=async()=>{
   const btn=$("gen"), st=$("genStatus");
   const fs=foodShiftInfo(), o={...foodCfg,shift:fs.shift,night:fs.night,shiftDetail:fs.detail,pantry:[...pantry]};
-  btn.disabled=true; st.textContent="Хөтөлбөр бэлдэж байна…";
+  btn.disabled=true; st.textContent=T("Хөтөлбөр бэлдэж байна…");
   let p=null, src="local";
   if(navigator.onLine!==false){
     const sample=await getSample();
     if(sample){
-      try{ st.textContent="Claude хөтөлбөр гаргаж байна…"; p=normalizePlan(await sample.json(planPrompt(o))); if(p) src="claude"; }
+      try{ st.textContent=T("Claude хөтөлбөр гаргаж байна…"); p=normalizePlan(await sample.json(planPrompt(o))); if(p) src="claude"; }
       catch(e){ p=null; }
     }
   }
@@ -2285,15 +2374,15 @@ $("gen").onclick=async()=>{
 const hm=m=>{m=((Math.round(m/15)*15)%1440+1440)%1440;return `${pad(Math.floor(m/60))}:${pad(m%60)}`};
 function mealTimes(s){
   const wake=s.sleepE, rel=x=>((x-wake)%1440+1440)%1440, len=((s.workE-s.workS)%1440+1440)%1440, mid=s.workS+len/2;
-  const out=[`Сэрээд · ${hm(wake+30)}`];
-  if(rel(s.workS)>=180){ out.push(`Ажлын өмнө · ${hm(s.workS-60)}`, `Ажил дээр · ${hm(mid)}`) }
-  else { out.push(`Ажил дээр · ${hm(mid)}`, `Орой · ${hm(wake+Math.max(rel(s.workE)+60,rel(s.sleepS)-180))}`) }
-  out.push("Зууш"); return out;
+  const out=[`${T("Сэрээд")} · ${hm(wake+30)}`];
+  if(rel(s.workS)>=180){ out.push(`${T("Ажлын өмнө")} · ${hm(s.workS-60)}`, `${T("Ажил дээр")} · ${hm(mid)}`) }
+  else { out.push(`${T("Ажил дээр")} · ${hm(mid)}`, `${T("Орой")} · ${hm(wake+Math.max(rel(s.workE)+60,rel(s.sleepS)-180))}`) }
+  out.push(T("Зууш")); return out;
 }
 const planKey=i=>addDays(mondayOf(dayKey(new Date())),i);      // plan day i = this week's Monday + i
 // This week's shifts, merged into runs: "Да–Ба: Өглөөний ээлж"
 function weekShiftRuns(){
-  const WDm=["Да","Мя","Лх","Пү","Ба","Бя","Ня"], runs=[];
+  const WDm=WD_MON, runs=[];
   for(let i=0;i<7;i++){const sh=shiftOn(planKey(i)), n=sh?sh.shift.name:"";
     const r=runs[runs.length-1]; if(r&&r.n===n) r.b=i; else runs.push({n,a:i,b:i,sh:sh&&sh.shift})}
   return runs.map(r=>({...r,days:r.a===r.b?WDm[r.a]:`${WDm[r.a]}–${WDm[r.b]}`}));
@@ -2302,43 +2391,43 @@ const isNight=x=>toMin(x.workS)>toMin(x.workE);                // work runs past
 function renderFoodShift(){
   const on=cfg.shifts.on;
   $("shiftRow").hidden=on; $("shiftAuto").hidden=!on; if(!on) return;
-  $("shiftAuto").textContent="🔁 Ээлжийн хуваариас: "+weekShiftRuns().map(r=>`${r.days} ${r.n}`).join(" · ")+". Хоолны цаг өдөр бүрийн ээлжээр тооцогдоно.";
+  $("shiftAuto").textContent="🔁 "+T("Ээлжийн хуваариас")+": "+weekShiftRuns().map(r=>`${r.days} ${r.n}`).join(" · ")+". "+T("Хоолны цаг өдөр бүрийн ээлжээр тооцогдоно.");
 }
 // What the plan generator is told about work hours.
 function foodShiftInfo(){
   if(!cfg.shifts.on) return {shift:foodCfg.shift,night:foodCfg.shift==="Шөнийн ээлж",detail:""};
   const runs=weekShiftRuns();
   return {shift:"Ээлж солигддог", night:runs.some(r=>r.sh&&isNight(r.sh)),
-    detail:runs.map(r=>`${r.days}: ${r.n} (ажил ${r.sh.workS}–${r.sh.workE}, унтах ${r.sh.sleepS}–${r.sh.sleepE})`).join("; ")};
+    detail:runs.map(r=>`${r.days}: ${r.n} (${T("ажил")} ${r.sh.workS}–${r.sh.workE}, ${T("унтах")} ${r.sh.sleepS}–${r.sh.sleepE})`).join("; ")};
 }
 function renderPlan(){
   const box=$("plan"), st=$("genStatus"); box.innerHTML="";
   if(!plan){st.textContent="";return}
   const d=new Date(plan.at);
-  st.textContent=(plan.src==="claude"?"Claude гаргасан":"Апп дотор бэлдсэн (офлайн)")+` · ${d.getMonth()+1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  st.textContent=T(plan.src==="claude"?"Claude гаргасан":"Апп дотор бэлдсэн (офлайн)")+` · ${d.getMonth()+1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   const tabs=document.createElement("div"); tabs.className="daytabs";
   plan.days.forEach((x,i)=>{const c=document.createElement("button");c.className="chip"+(i===planDay?" on":"");c.textContent=x.day;
     c.onclick=()=>{planDay=i;renderPlan()};tabs.appendChild(c)});
   box.appendChild(tabs);
   const day=plan.days[planDay]||plan.days[0], dsh=cfg.shifts.on?shiftOn(planKey(planDay)):null;
-  const labels=dsh?mealTimes(sch(planKey(planDay))):MEAL_LABELS[foodCfg.shift]||MEAL_LABELS["Ээлж солигддог"];
+  const labels=dsh?mealTimes(sch(planKey(planDay))):(MEAL_LABELS[foodCfg.shift]||MEAL_LABELS["Ээлж солигддог"]).map(x=>x.split(" · ").map(y=>T("meal:"+y)).join(" · "));
   const card=document.createElement("div"); card.className="card";
-  if(dsh){const h=document.createElement("div"); h.className="small"; h.style.margin="0 0 6px"; h.textContent=`🔁 ${dsh.shift.name} · ажил ${dsh.shift.workS}–${dsh.shift.workE}`; card.appendChild(h)}
+  if(dsh){const h=document.createElement("div"); h.className="small"; h.style.margin="0 0 6px"; h.textContent=`🔁 ${dsh.shift.name} · ${T("ажил")} ${dsh.shift.workS}–${dsh.shift.workE}`; card.appendChild(h)}
   MEAL_KEYS.forEach((k,i)=>{ if(!day[k])return; const m=document.createElement("div"); m.className="meal";
     m.innerHTML=`<div class="k"></div><div class="v"></div>`; m.querySelector(".k").textContent=labels[i]; m.querySelector(".v").textContent=day[k]; card.appendChild(m); });
   if(day.workout&&day.workout.length){
-    const m=document.createElement("div"); m.className="meal"; m.innerHTML=`<div class="k">Дасгал</div><ul class="ex v"></ul>`;
+    const m=document.createElement("div"); m.className="meal"; m.innerHTML=`<div class="k">${T("Дасгал")}</div><ul class="ex v"></ul>`;
     day.workout.forEach(w=>{const li=document.createElement("li");li.textContent=w;m.querySelector("ul").appendChild(li)});
     card.appendChild(m);
   }
   box.appendChild(card);
   if(plan.uses&&plan.uses.length){
-    const c=document.createElement("div"); c.className="card"; c.innerHTML=`<div class="sub" style="margin-top:0">Гэрийн хүнсийг ашиглах</div>`;
+    const c=document.createElement("div"); c.className="card"; c.innerHTML=`<div class="sub" style="margin-top:0">${T("Гэрийн хүнсийг ашиглах")}</div>`;
     plan.uses.forEach(u=>{const r=document.createElement("div");r.className="use";const b=document.createElement("b");b.textContent=u.item;const s=document.createElement("span");s.textContent=u.how;r.append(b,s);c.appendChild(r)});
     box.appendChild(c);
   }
   if(plan.tips&&plan.tips.length){
-    const c=document.createElement("div"); c.className="card"; c.innerHTML=`<div class="sub" style="margin-top:0">Зөвлөмж</div>`;
+    const c=document.createElement("div"); c.className="card"; c.innerHTML=`<div class="sub" style="margin-top:0">${T("Зөвлөмж")}</div>`;
     plan.tips.forEach(t=>{const r=document.createElement("div");r.className="tip";r.textContent=t;c.appendChild(r)});
     box.appendChild(c);
   }
@@ -2377,14 +2466,14 @@ function renderInstall(){
   $("appSec").hidden=false;
   $("installBtn").hidden=!installEvt;
   $("installNote").textContent=inAppBrowser
-    ?"Та Facebook/Messenger/Instagram доторх хөтчөөр нээсэн байна. Эндээс суулгах боломжгүй: «⋯» цэснээс "+(isIOS?"«Safari-д нээх»":"«Chrome-д нээх» / «Браузерт нээх»")+"-ийг сонгоод тэндээс суулгана уу."
-    :installEvt?"Суулгавал апп шиг нээгдэж, интернэтгүй үед ч ажиллана."
-    :isIOS?"iPhone дээр суулгах: Safari-н доод талын «Хуваалцах» (⬆) → «Нүүр дэлгэцэнд нэмэх» → «Нэмэх». Суулгаагүй үед Safari 7 хоног нээгээгүй сайтын өгөгдлийг устгаж болзошгүй тул заавал суулгаарай."
-    :isAndroid?"Android дээр суулгах: Chrome-н баруун дээд «⋮» цэс → «Нүүр дэлгэцэнд нэмэх» эсвэл «Апп суулгах»."
-    :"Браузерын цэснээс «Апп суулгах» эсвэл «Нүүр дэлгэцэнд нэмэх»-ийг сонгоно уу.";
+    ?T(isIOS?"Та Facebook/Messenger/Instagram доторх хөтчөөр нээсэн байна. Эндээс суулгах боломжгүй: «⋯» цэснээс «Safari-д нээх»-ийг сонгоод тэндээс суулгана уу.":"Та Facebook/Messenger/Instagram доторх хөтчөөр нээсэн байна. Эндээс суулгах боломжгүй: «⋯» цэснээс «Chrome-д нээх» / «Браузерт нээх»-ийг сонгоод тэндээс суулгана уу.")
+    :installEvt?T("Суулгавал апп шиг нээгдэж, интернэтгүй үед ч ажиллана.")
+    :isIOS?T("iPhone дээр суулгах: Safari-н доод талын «Хуваалцах» (⬆) → «Нүүр дэлгэцэнд нэмэх» → «Нэмэх». Суулгаагүй үед Safari 7 хоног нээгээгүй сайтын өгөгдлийг устгаж болзошгүй тул заавал суулгаарай.")
+    :isAndroid?T("Android дээр суулгах: Chrome-н баруун дээд «⋮» цэс → «Нүүр дэлгэцэнд нэмэх» эсвэл «Апп суулгах».")
+    :T("Браузерын цэснээс «Апп суулгах» эсвэл «Нүүр дэлгэцэнд нэмэх»-ийг сонгоно уу.");
 }
 addEventListener("beforeinstallprompt",e=>{e.preventDefault();installEvt=e;renderInstall()});
-addEventListener("appinstalled",()=>{installEvt=null;renderInstall();toast("Элсэн цаг суулгагдлаа ⏳")});
+addEventListener("appinstalled",()=>{installEvt=null;renderInstall();toast(T("Элсэн цаг суулгагдлаа ⏳"))});
 $("installBtn").onclick=async()=>{if(!installEvt)return;installEvt.prompt();try{await installEvt.userChoice}catch(e){}installEvt=null;renderInstall()};
 renderInstall();
 
@@ -2399,8 +2488,8 @@ function backupData(){
 function fmtDate(ts){const d=new Date(ts);return `${d.getFullYear()}.${pad(d.getMonth()+1)}.${pad(d.getDate())}`}
 function renderBackup(){
   const at=store.get("elsen_backup_at",0), days=Object.keys(hist).filter(k=>Object.keys(hist[k]||{}).length).length;
-  $("backupNote").textContent="Өгөгдөл зөвхөн энэ төхөөрөмжид хадгалагддаг. Утас солих, апп устгахаас өмнө нөөц хуулбар хадгалаарай. "+
-    (at?`Сүүлд хадгалсан: ${fmtDate(at)}.`:days?`${days} өдрийн түүх нөөцлөгдөөгүй байна.`:"");
+  $("backupNote").textContent=T("Өгөгдөл зөвхөн энэ төхөөрөмжид хадгалагддаг. Утас солих, апп устгахаас өмнө нөөц хуулбар хадгалаарай.")+" "+
+    (at?T("Сүүлд хадгалсан: {d}.",{d:fmtDate(at)}):days?T("{n} өдрийн түүх нөөцлөгдөөгүй байна.",{n:days}):"");
 }
 async function exportBackup(){
   const name=`elsen-tsag-${dayKey(new Date())}.json`;
@@ -2409,7 +2498,7 @@ async function exportBackup(){
   // Phone: share sheet ("Save to Files", Drive, Telegram...). Works in an installed iPhone app where downloads don't.
   if(matchMedia("(pointer:coarse)").matches&&navigator.canShare){
     try{const f=new File([blob],name,{type:"application/json"});
-      if(navigator.canShare({files:[f]})){await navigator.share({files:[f],title:"Элсэн цаг · нөөц"}); done=true}}
+      if(navigator.canShare({files:[f]})){await navigator.share({files:[f],title:T("Элсэн цаг · нөөц")}); done=true}}
     catch(e){if(e&&e.name==="AbortError") return}
   }
   // Inside claude.ai the page is sandboxed: use the platform's download capability when it is there.
@@ -2421,7 +2510,7 @@ async function exportBackup(){
     const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name;
     document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove()},2000);
   }
-  store.set("elsen_backup_at",Date.now()); renderBackup(); toast("Нөөц хуулбар хадгаллаа ✓");
+  store.set("elsen_backup_at",Date.now()); renderBackup(); toast(T("Нөөц хуулбар хадгаллаа ✓"));
 }
 function applyBackup(data){
   DATA_KEYS.forEach(k=>{try{if(k in data) localStorage.setItem(k,JSON.stringify(data[k])); else localStorage.removeItem(k)}catch(e){}});
@@ -2430,7 +2519,7 @@ $("exportBtn").onclick=exportBackup;
 $("importBtn").onclick=()=>$("importFile").click();
 $("importFile").onchange=async e=>{
   const f=e.target.files&&e.target.files[0]; e.target.value=""; if(!f) return;
-  offerRestore(await f.text(),"Энэ файл Элсэн цагийн нөөц биш байна");
+  offerRestore(await f.text(),T("Энэ файл Элсэн цагийн нөөц биш байна"));
 };
 // Copy / paste: works everywhere, even where files can't be saved (claude.ai, some in-app browsers).
 $("copyBtn").onclick=async()=>{
@@ -2440,23 +2529,23 @@ $("copyBtn").onclick=async()=>{
   if(!ok){ // older / restricted browsers: copy from a selected text field
     const t=$("pasteIn"); $("pasteBox").hidden=false; t.value=txt; t.focus(); t.select();
     try{ok=document.execCommand("copy")}catch(e){}
-    if(!ok){toast("Доорх текстийг бүхэлд нь сонгоод хуулна уу"); return}
+    if(!ok){toast(T("Доорх текстийг бүхэлд нь сонгоод хуулна уу")); return}
     t.value=""; $("pasteBox").hidden=true;
   }
   store.set("elsen_backup_at",Date.now()); renderBackup();
-  toast(`Нөөц хуулагдлаа ✓ (${Math.round(txt.length/1024)||1} КБ). Тэмдэглэл, мессеж, имэйлд буулгаж хадгална уу`);
+  toast(T("Нөөц хуулагдлаа ✓ ({n} КБ). Тэмдэглэл, мессеж, имэйлд буулгаж хадгална уу",{n:Math.round(txt.length/1024)||1}));
 };
 $("pasteBtn").onclick=async()=>{
   $("pasteBox").hidden=false; const t=$("pasteIn");
   try{const c=await navigator.clipboard.readText(); if(c&&c.includes("elsen-tsag")) t.value=c}catch(e){}
   t.focus();
 };
-$("pasteGo").onclick=()=>offerRestore($("pasteIn").value,"Энэ текст Элсэн цагийн нөөц биш байна. Бүтэн хуулсан эсэхээ шалгана уу");
+$("pasteGo").onclick=()=>offerRestore($("pasteIn").value,T("Энэ текст Элсэн цагийн нөөц биш байна. Бүтэн хуулсан эсэхээ шалгана уу"));
 function offerRestore(text,badMsg){
   let obj=null; try{obj=JSON.parse(String(text).trim())}catch(err){}
   if(!obj||obj.app!=="elsen-tsag"||!obj.data||typeof obj.data!=="object"){toast(badMsg);return}
   const days=Object.keys(obj.data.elsen_hist||{}).filter(k=>Object.keys(obj.data.elsen_hist[k]||{}).length).length;
-  toast(`${days} өдрийн түүхтэй нөөц (${fmtDate(obj.exported||Date.now())}). Одоогийн өгөгдлийг солих уу?`,"Сэргээх",()=>{
+  toast(T("{n} өдрийн түүхтэй нөөц ({d}). Одоогийн өгөгдлийг солих уу?",{n:days,d:fmtDate(obj.exported||Date.now())}),T("Сэргээх"),()=>{
     store.set("elsen_undo",backupData());              // one-step undo, offered after the reload
     applyBackup(obj.data);
     try{sessionStorage.setItem("elsen_restored","1")}catch(e){}
@@ -2467,7 +2556,7 @@ function offerRestore(text,badMsg){
 try{
   if(sessionStorage.getItem("elsen_restored")){
     sessionStorage.removeItem("elsen_restored");
-    setTimeout(()=>toast("Нөөцөөс сэргээлээ ✓","Буцаах",()=>{
+    setTimeout(()=>toast(T("Нөөцөөс сэргээлээ ✓"),T("Буцаах"),()=>{
       const u=store.get("elsen_undo",null); if(!u) return;
       applyBackup(u.data); localStorage.removeItem("elsen_undo"); location.reload();
     },12000),300);
@@ -2481,7 +2570,7 @@ if("serviceWorker" in navigator && /^https?:$/.test(location.protocol)){
   addEventListener("load",async()=>{
     try{
       swReg=await navigator.serviceWorker.register("sw.js");
-      const offerUpdate=w=>{pendingUpdate=()=>offerUpdate(w); toast("Шинэ хувилбар бэлэн боллоо","Шинэчлэх",()=>{pendingUpdate=null;updating=true;w.postMessage("SKIP_WAITING")},0); toastIsUpdate=true};
+      const offerUpdate=w=>{pendingUpdate=()=>offerUpdate(w); toast(T("Шинэ хувилбар бэлэн боллоо"),T("Шинэчлэх"),()=>{pendingUpdate=null;updating=true;w.postMessage("SKIP_WAITING")},0); toastIsUpdate=true};
       // an installed app can stay open for days: look for a new version whenever it comes back to the screen
       document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")swReg.update().catch(()=>{})});
       if(swReg.waiting&&navigator.serviceWorker.controller) offerUpdate(swReg.waiting);
@@ -2509,18 +2598,14 @@ if("serviceWorker" in navigator && /^https?:$/.test(location.protocol)){
 try{if(REDUCED)document.querySelector("svg.glass").pauseAnimations()}catch(e){}
 
 /* ---------- daily lesson, habit library, 30-day challenges (texts in i18n.js) ---------- */
-// index.html alone (e.g. a claude.ai artifact) has no i18n.js: these parts then stay hidden.
-const I18=typeof I18N!=="undefined"?I18N:{langs:{},ui:{},lessons:[],cats:[],library:[],challenges:[]};
-const LI=()=>Math.max(0,["mn","en","cs"].indexOf(cfg.lang));
-const tx=a=>Array.isArray(a)?(a[LI()]||a[0]):String(a??"");
 const LESSON_KIND={p:"Монгол зүйр үг",s:"Сургаал үг",t:"Зөвлөгөө"};
 // One lesson per day of the year, the same for everyone on that date.
 function lessonOf(k){const L=I18.lessons; return L.length?L[daysBetween(k.slice(0,4)+"-01-01",k)%L.length]:null}
 function renderLesson(){
   const it=lessonOf(dayKey(new Date())), box=$("lesson"); box.hidden=!it; if(!it) return;
-  box.dataset.kind=it[0]; $("lessonK").textContent="Өдрийн сургамж · "+LESSON_KIND[it[0]]; $("lessonT").textContent=tx(it.slice(1));
+  box.dataset.kind=it[0]; $("lessonK").textContent=T("Өдрийн сургамж")+" · "+T(LESSON_KIND[it[0]]); $("lessonT").textContent=tx(it.slice(1));
 }
-const doseText=(d,unit)=>!d?"":d[0]===d[1]?`${d[0]} ${unit}`:`${d[0]} → ${d[1]} ${unit} · 7 хоног тутам +${d[2]}`;
+const doseText=(d,unit)=>!d?"":d[0]===d[1]?`${d[0]} ${unit}`:`${d[0]} → ${d[1]} ${unit} · ${T("7 хоног тутам")} +${d[2]}`;
 let libTab="habits", libCat=null, libY=0;
 function openLib(tab){
   libTab=tab||"habits"; renderLib();
@@ -2560,27 +2645,32 @@ function renderLib(){
     box.appendChild(chips);
     I18.library.filter(x=>x.cat===cur).forEach(it=>{
       const have=cfg.tasks.some(t=>t.lib===it.id), f=it.freq&&it.freq.t!=="daily"?freqText(it.freq):"";
-      box.appendChild(libRow("",tx(it.name),[doseText(it.dose,tx(it.unit)),f].filter(Boolean).join(" · "),have?"✓ Нэмсэн":"+ Нэмэх",have,()=>addFromLib(it),
-        have?`${tx(it.name)}: нэмсэн`:`Нэмэх: ${tx(it.name)}`));
+      box.appendChild(libRow("",tx(it.name),[doseText(it.dose,tx(it.unit)),f].filter(Boolean).join(" · "),T(have?"✓ Нэмсэн":"+ Нэмэх"),have,()=>addFromLib(it),
+        have?`${tx(it.name)}: ${T("нэмсэн")}`:`${T("Нэмэх")}: ${tx(it.name)}`));
     });
   } else {
     I18.challenges.forEach(c=>{
       const on=chal.cur&&chal.cur.id===c.id;
-      box.appendChild(libRow(c.icon,tx(c.name),tx(c.desc),on?"Явж байна":"Эхлүүлэх",!!chal.cur,()=>startChal(c.id),
-        on?`${tx(c.name)}: явж байна`:`Эхлүүлэх: ${tx(c.name)}`));
+      box.appendChild(libRow(c.icon,tx(c.name),tx(c.desc),T(on?"Явж байна":"Эхлүүлэх"),!!chal.cur,()=>startChal(c.id),
+        on?`${tx(c.name)}: ${T("явж байна")}`:`${T("Эхлүүлэх")}: ${tx(c.name)}`));
     });
-    if(chal.cur){const n=document.createElement("div"); n.className="small"; n.textContent="Нэг удаад нэг сорилт. Шинийг эхлүүлэхийн тулд одоогийнхоо сорилтыг дуусгаарай."; box.appendChild(n)}
+    if(chal.cur){const n=document.createElement("div"); n.className="small"; n.textContent=T("Нэг удаад нэг сорилт. Шинийг эхлүүлэхийн тулд одоогийнхоо сорилтыг дуусгаарай."); box.appendChild(n)}
   }
 }
 // A ready-made habit joins the list in the current language, starting small from today.
-function addFromLib(it){
+let habSeq=0;
+function habitFromLib(it){
   const k=dayKey(new Date());
-  const t={id:"h"+Date.now().toString(36),name:tx(it.name),min:0,rem:"",unit:"",link:"",freq:normFreq(it.freq),start:k,lib:it.id,after:"",
+  const t={id:"h"+Date.now().toString(36)+(habSeq++),name:tx(it.name),min:0,rem:"",unit:"",link:"",freq:normFreq(it.freq),start:k,lib:it.id,after:"",
     dose:it.dose?normDose({from:it.dose[0],to:it.dose[1],step:it.dose[2],unit:tx(it.unit),since:k}):null};
   if(it.id==="bh"&&cfg.waterGoal>0&&!cfg.tasks.some(x=>x.link==="water")){t.link="water"; t.dose=null}   // water: the cup counter does the counting
+  return t;
+}
+function addFromLib(it){
+  const t=habitFromLib(it);
   cfg.tasks.push(t); applyDose(); store.set("elsen_cfg",cfg);
   renderTasks(); renderWeek(); renderLib(); syncWaterTask(); buzz(12);
-  toast(`«${t.name}» нэмэгдлээ ✓`);
+  toast(T("«{name}» нэмэгдлээ ✓",{name:t.name}));
 }
 // 30-day challenge: {cur:{id,start}, log:{"id@start":{dayIndex:"HH:MM"}}, past:[{id,start,end,done}]}
 let chal=store.get("elsen_chal",{});
@@ -2612,22 +2702,110 @@ function renderChal(){
   card.innerHTML="";
   if(i>=30){
     $("chDay").textContent=`${n}/30`;
-    card.innerHTML=`<div class="fin">🎉 Сорилт дууслаа!<br>30 өдрөөс <b>${n}</b>-д нь биелүүлсэн.</div><button class="btn primary">Дуусгах</button>`;
+    card.innerHTML=`<div class="fin">🎉 ${T("Сорилт дууслаа!")}<br>${T("30 өдрөөс <b>{n}</b>-д нь биелүүлсэн.",{n})}</div><button class="btn primary">${T("Дуусгах")}</button>`;
     card.querySelector("button").onclick=endChal; return;
   }
-  $("chDay").textContent=`${i+1} ${ordSuf(i+1)} өдөр / 30`;
+  $("chDay").textContent=T("{n} {ord} өдөр",{n:i+1,ord:ordSuf(i+1)})+" / 30";
   const done=!!log[i], row=document.createElement("div");
   row.className="ct"+(done?" done":""); row.tabIndex=0; row.setAttribute("role","checkbox"); row.setAttribute("aria-checked",String(done));
   row.innerHTML=`<div class="box"></div><div class="t"></div>`; row.querySelector(".t").textContent=chalText(c,i);
   row.onclick=()=>{if(log[i]) delete log[i]; else {log[i]=hhmm(new Date()); buzz(15)} saveChal(); renderChal()};
   row.onkeydown=e=>{if(e.key===" "||e.key==="Enter"){e.preventDefault(); row.click()}};
-  const dots=document.createElement("div"); dots.className="dots"; dots.setAttribute("aria-label",`30 өдрөөс ${n} биелсэн`); dots.setAttribute("role","img");
+  const dots=document.createElement("div"); dots.className="dots"; dots.setAttribute("aria-label",T("30 өдрөөс {n} биелсэн",{n})); dots.setAttribute("role","img");
   for(let d=0;d<30;d++){const x=document.createElement("i"); x.className=log[d]?"ok":d<i?"miss":d===i?"cur":""; dots.appendChild(x)}
-  const foot=document.createElement("div"); foot.className="cf"; foot.innerHTML=`<span>${n} биелсэн</span><button>Зогсоох</button>`;
-  foot.querySelector("button").onclick=()=>toast("Сорилтыг зогсоох уу? Тэмдэглэл хадгалагдана.","Зогсоох",endChal,8000);
+  const foot=document.createElement("div"); foot.className="cf"; foot.innerHTML=`<span>${T("{n} биелсэн",{n})}</span><button>${T("Зогсоох")}</button>`;
+  foot.querySelector("button").onclick=()=>toast(T("Сорилтыг зогсоох уу? Тэмдэглэл хадгалагдана."),T("Зогсоох"),endChal,8000);
   card.append(row,dots,foot);
 }
 window.chalReady=true;
+
+/* ---------- welcome screens (first start only) ----------
+   1 welcome + language · 2 what to learn (categories) · 3 pick 1–3 habits · 4 sleep and work hours.
+   Progress lives in sessionStorage so a language change (page reload) continues where it was. */
+let onb={step:0,cats:[],picks:[]};
+try{const o=JSON.parse(sessionStorage.getItem("elsen_onb")||"null"); if(isObj(o)) onb={...onb,...o}}catch(e){}
+const saveOnb=()=>{try{sessionStorage.setItem("elsen_onb",JSON.stringify(onb))}catch(e){}};
+const ONB_STEPS=()=>I18.library.length?["hi","cats","picks","day"]:["hi","day"];
+const ONB_MAX=3;
+function showOnb(){$("onb").hidden=false; document.body.classList.add("noscroll"); renderOnb()}
+function renderOnb(){
+  const steps=ONB_STEPS(), st=steps[Math.min(onb.step,steps.length-1)], body=$("onbBody");
+  $("onbDots").innerHTML=steps.map((_,i)=>`<i class="${i===onb.step?"on":""}"></i>`).join("");
+  $("onbBack").hidden=onb.step===0; $("onbNext").disabled=false;
+  $("onbNext").textContent=T(onb.step===steps.length-1?"Эхлэх":"Үргэлжлүүлэх");
+  body.innerHTML="";
+  const h=(tag,text,id)=>{const e=document.createElement(tag); e.textContent=text; if(id) e.id=id; body.appendChild(e); return e};
+  if(st==="hi"){
+    h("div","⏳").className="onbglass";
+    h("h2",T("Тавтай морил"),"onbTitle");
+    h("p",T("Элсэн цаг өдөр бүр шинэ зүйл сурч, түүнийгээ дадал болгоход тусална. Жижгээс эхэлж, өдрөөс өдөрт урагшилна."));
+    const l=document.createElement("div"); l.className="langs"; l.setAttribute("role","radiogroup"); l.setAttribute("aria-label","Хэл · Language · Jazyk");
+    LANGS.forEach(code=>{const b=document.createElement("button"); b.className="btn"+(cfg.lang===code?" on":""); b.textContent=I18.langs[code]||code;
+      b.setAttribute("role","radio"); b.setAttribute("aria-checked",String(cfg.lang===code)); b.lang=code;
+      b.onclick=()=>{if(cfg.lang===code) return; cfg.lang=code; cfg.onboarded=false; store.set("elsen_cfg",cfg); saveOnb(); location.reload()};
+      l.appendChild(b)});
+    body.appendChild(l);
+  } else if(st==="cats"){
+    h("h2",T("Юунд суралцмаар байна?"),"onbTitle");
+    h("p",T("Нэг эсвэл хэдэн чиглэл сонгоорой."));
+    const g=document.createElement("div"); g.className="onbcats";
+    I18.cats.forEach(c=>{const b=document.createElement("button"); const on=onb.cats.includes(c.id);
+      b.innerHTML=`<span aria-hidden="true">${c.icon}</span>`; b.append(tx(c.name)); b.setAttribute("aria-pressed",String(on));
+      b.onclick=()=>{onb.cats=on?onb.cats.filter(x=>x!==c.id):[...onb.cats,c.id]; saveOnb(); renderOnb()};
+      g.appendChild(b)});
+    body.appendChild(g);
+    $("onbNext").disabled=!onb.cats.length;
+  } else if(st==="picks"){
+    h("h2",T("1–3 дадал сонго"),"onbTitle");
+    h("p",T("Цөөнөөр эхлэх нь амжилтын түлхүүр. Бүгд жижиг хэмжээнээс эхэлж, 7 хоног тутам өснө."));
+    const list=document.createElement("div"); list.className="onbpick";
+    const items=I18.library.filter(x=>!onb.cats.length||onb.cats.includes(x.cat));
+    items.forEach(it=>{
+      const on=onb.picks.includes(it.id), full=!on&&onb.picks.length>=ONB_MAX;
+      const r=document.createElement("div"); r.className="li"; r.tabIndex=0; r.setAttribute("role","checkbox");
+      r.setAttribute("aria-checked",String(on)); r.setAttribute("aria-disabled",String(full));
+      r.innerHTML=`<div class="box"></div><div class="tx"><div class="t"></div><div class="st"></div></div>`;
+      r.querySelector(".t").textContent=tx(it.name);
+      const f=it.freq&&it.freq.t!=="daily"?freqText(it.freq):"";
+      r.querySelector(".st").textContent=[doseText(it.dose,tx(it.unit)),f].filter(Boolean).join(" · ")||T("Өдөр бүр");
+      r.onclick=()=>{if(full) return; onb.picks=on?onb.picks.filter(x=>x!==it.id):[...onb.picks,it.id]; saveOnb(); renderOnb()};
+      r.onkeydown=e=>{if(e.key===" "||e.key==="Enter"){e.preventDefault(); r.click()}};
+      list.appendChild(r)});
+    h("div",T("{n}/3 сонгосон",{n:onb.picks.length})).className="small";
+    body.appendChild(list);
+    $("onbNext").disabled=!onb.picks.length;
+  } else {
+    h("h2",T("Таны өдөр"),"onbTitle");
+    h("p",T("Хэзээ унтаж, хэзээ ажилладгаа оруулбал өдрийн элсэн цаг таны хэмнэлээр урсана."));
+    const v=onb.day||{sleepS:cfg.sleepS,sleepE:cfg.sleepE,workS:cfg.workS,workE:cfg.workE};
+    const row=(lab,a,b)=>{const r=document.createElement("div"); r.className="row";
+      r.innerHTML=`<label>${lab}</label><div class="pair"><input type="time" id="onb_${a}" value="${v[a]}" aria-label="${lab}">–<input type="time" id="onb_${b}" value="${v[b]}" aria-label="${lab}"></div>`;
+      body.appendChild(r)};
+    row("😴 "+T("Унтах"),"sleepS","sleepE"); row("💼 "+T("Ажил"),"workS","workE");
+    h("div",T("Ээлжээр ажилладаг бол дараа нь Тохиргоо → «Ээлжээр ажилладаг»-аас оруулна.")).className="note";
+    body.querySelectorAll("input").forEach(i=>i.onchange=()=>{onb.day={...v,[i.id.slice(4)]:i.value}; Object.assign(v,onb.day); saveOnb()});
+  }
+  setTimeout(()=>{const t=$("onbTitle"); if(t){t.tabIndex=-1; t.focus({preventScroll:true})}},0);
+}
+function endOnb(apply){
+  if(apply){
+    const d=onb.day; if(d) ["sleepS","sleepE","workS","workE"].forEach(k=>{if(isHM(d[k])) cfg[k]=d[k]});
+    onb.picks.map(id=>I18.library.find(x=>x.id===id)).filter(Boolean).forEach(it=>cfg.tasks.push(habitFromLib(it)));
+  }
+  cfg.onboarded=true; applyDose(); store.set("elsen_cfg",cfg);
+  try{sessionStorage.removeItem("elsen_onb")}catch(e){}
+  $("onb").hidden=true; document.body.classList.remove("noscroll");
+  drawBar(); renderTasks(); renderWeek(); tick();
+  if(apply&&cfg.tasks.length) toast(T("Амжилт хүсье! Өнөөдрөөс эхэлцгээе ⏳"));
+}
+$("onbNext").onclick=()=>{const n=ONB_STEPS().length; if(onb.step>=n-1){
+    ["sleepS","sleepE","workS","workE"].forEach(k=>{const i=$("onb_"+k); if(i&&isHM(i.value)) (onb.day=onb.day||{})[k]=i.value});
+    endOnb(true)} else {onb.step++; saveOnb(); renderOnb(); $("onb").scrollTop=0}};
+$("onbBack").onclick=()=>{if(onb.step>0){onb.step--; saveOnb(); renderOnb()}};
+$("onbSkip").onclick=()=>endOnb(false);
+// Settings: language. The page reloads so every text, date and name switches at once.
+$("langSel").value=cfg.lang;
+$("langSel").onchange=e=>{if(!LANGS.includes(e.target.value)) return; cfg.lang=e.target.value; store.set("elsen_cfg",cfg); location.reload()};
 
 let startView="v-day"; try{startView=sessionStorage.getItem("elsen_view")||"v-day"}catch(e){}
 // Home-screen shortcuts open a tab directly: ./?v=v-sw, ./?v=v-stat
@@ -2645,6 +2823,7 @@ try{
   if(useHist&&startView==="v-day"&&st.view) history.replaceState(null,"");
 }catch(e){}
 showView(startView);
+if(FIRST_RUN) showOnb();
 // First time the app is opened on a new day: turn the hourglass over once.
 if(store.get("elsen_seen",null)!==lastKey){ if(store.get("elsen_seen",null)) setTimeout(flipGlass,400); store.set("elsen_seen",lastKey) }
 </script>
