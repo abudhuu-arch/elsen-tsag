@@ -679,3 +679,76 @@ test('stats follow habits: per-habit streaks, weekly goals, rest days, days with
   // weekly report: the weak habit is the swim, against its goal of 2
   assert.match(await page.textContent('#wkStat'), /Сул даалгавар: Сэлэх 0\/2 удаа/);
 });
+
+test('lesson of the day: one of 365, changes with the date, offline from i18n.js', async t => {
+  const { page } = await open(t, null, { time: new Date(2026, 0, 1, 12, 0) });
+  assert.equal(await page.evaluate(() => I18N.lessons.length), 365);
+  assert.equal(await page.evaluate(() => new Set(I18N.lessons.map(l => l[1])).size), 365);
+  const first = await page.textContent('#lessonT');
+  assert.equal(first, await page.evaluate(() => I18N.lessons[0][1]));
+  assert.match(await page.textContent('#lessonK'), /^Өдрийн сургамж · (Монгол зүйр үг|Сургаал үг|Зөвлөгөө)$/);
+  await page.clock.setFixedTime(new Date(2026, 11, 31, 12, 0)); await page.evaluate(() => tick());
+  assert.equal(await page.textContent('#lessonT'), await page.evaluate(() => I18N.lessons[364][1]));
+  // every kind, every language present and filled
+  assert.ok(await page.evaluate(() => I18N.lessons.every(l => ['p', 's', 't'].includes(l[0]) && l.slice(1).every(x => typeof x === 'string' && x.length > 5))));
+});
+
+test('habit library: 6 categories of 6–8 habits; adding one starts small from today', async t => {
+  const { page } = await open(t, null, { time: new Date(2026, 10, 18, 12, 0) });
+  const cats = await page.evaluate(() => I18N.cats.map(c => [c.id, I18N.library.filter(x => x.cat === c.id).length]));
+  assert.deepEqual(cats.map(c => c[0]), ['lang', 'body', 'mind', 'family', 'calm', 'money']);
+  assert.ok(cats.every(([, n]) => n >= 6 && n <= 8), JSON.stringify(cats));
+  await page.click('#openLib');
+  assert.ok(await page.$eval('#lib', e => e.classList.contains('on')));
+  assert.equal(await page.locator('#libBody .libcats .chip').count(), 6);
+  const first = page.locator('#libBody .li').first();
+  assert.equal(await first.locator('.t').textContent(), 'Шинэ үг цээжлэх');
+  assert.equal(await first.locator('.st').textContent(), '5 → 20 үг · 7 хоног тутам +5');
+  await first.locator('.lbtn').click();
+  assert.equal(await first.locator('.lbtn').textContent(), '✓ Нэмсэн');
+  assert.ok(await first.locator('.lbtn').isDisabled());
+  const t7 = await page.evaluate(() => cfg.tasks[cfg.tasks.length - 1]);
+  assert.equal(t7.name, 'Шинэ үг цээжлэх'); assert.equal(t7.lib, 'lw'); assert.equal(t7.start, '2026-11-18');
+  assert.deepEqual(t7.dose, { from: 5, to: 20, step: 5, unit: 'үг', since: '2026-11-18' });
+  // a weekday habit from another category keeps its days
+  await page.locator('#libBody .libcats .chip').nth(5).click();
+  await page.locator('#libBody .li', { hasText: 'Гэрээс хоол авч явах' }).locator('.lbtn').click();
+  assert.deepEqual(await page.evaluate(() => cfg.tasks[cfg.tasks.length - 1].freq), { t: 'days', d: [1, 2, 3, 4, 5] });
+  // back button closes the library; the new habits are on the list
+  await page.goBack();
+  assert.ok(!(await page.$eval('#lib', e => e.classList.contains('on'))));
+  assert.equal(await page.locator('#tasks .task').count(), 8);
+  assert.match(await page.locator('#tasks .task').nth(6).locator('.st').textContent(), /📈 5 → 20 үг/);
+});
+
+test('30-day challenge: start, today\'s task, tick, days go by, finish', async t => {
+  const { page } = await open(t, null, { time: new Date(2026, 10, 18, 12, 0) });
+  assert.equal(await page.evaluate(() => I18N.challenges.length), 6);
+  assert.ok(await page.evaluate(() => I18N.challenges.every(c => (c.vals || c.days).length === 30)));
+  assert.ok(await page.isHidden('#chalSec'));
+  await page.click('#openChal');
+  await page.locator('#libBody .li', { hasText: '30 хоногийн суулт' }).locator('.lbtn').click();
+  assert.ok(await page.isVisible('#chalSec'));
+  assert.equal(await page.textContent('#chDay'), '1 дэх өдөр / 30');
+  assert.equal(await page.textContent('#chCard .ct .t'), 'Өнөөдөр 20 суулт хий');
+  await page.click('#chCard .ct');
+  assert.equal(await page.getAttribute('#chCard .ct', 'aria-checked'), 'true');
+  assert.equal(await page.locator('#chCard .dots i.ok').count(), 1);
+  // day 4 is a rest day; day 2 and 3 were missed
+  await page.clock.setFixedTime(new Date(2026, 10, 21, 12, 0)); await page.evaluate(() => tick());
+  assert.equal(await page.textContent('#chDay'), '4 дэх өдөр / 30');
+  assert.equal(await page.textContent('#chCard .ct .t'), 'Амралтын өдөр: 5 минут сунгалт хий');
+  assert.equal(await page.locator('#chCard .dots i.miss').count(), 2);
+  // only one challenge at a time
+  await page.click('#openChal');
+  assert.ok(await page.locator('#libBody .lbtn').first().isDisabled());
+  await page.goBack();
+  // after 30 days: finished card, then it's archived
+  await page.clock.setFixedTime(new Date(2026, 11, 19, 12, 0)); await page.evaluate(() => tick());
+  assert.match(await page.textContent('#chCard'), /Сорилт дууслаа!.*30 өдрөөс 1-д/s);
+  await page.click('#chCard .btn');
+  assert.ok(await page.isHidden('#chalSec'));
+  const c = await page.evaluate(() => JSON.parse(localStorage.elsen_chal));
+  assert.deepEqual(c.past, [{ id: 'sq', start: '2026-11-18', end: '2026-12-19', done: 1 }]);
+  assert.ok(await page.evaluate(() => DATA_KEYS.includes('elsen_chal')));
+});

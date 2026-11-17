@@ -387,6 +387,33 @@ input[type=time]::-webkit-date-and-time-value{text-align:left}
 :focus-visible{outline:2px solid var(--sand3);outline-offset:2px;border-radius:6px}
 .task:focus-visible{outline-offset:-1px;border-radius:14px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+.lesson{background:linear-gradient(180deg,rgba(227,178,107,.08),rgba(227,178,107,.02));border:1px solid var(--line);border-radius:16px;padding:12px 16px;margin:4px 0 6px;text-align:center}
+.lesson .lk{font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:var(--dim)}
+.lesson .lt{font-size:15px;line-height:1.45;color:var(--ink);margin-top:4px}
+.lesson[data-kind=p] .lt,.lesson[data-kind=s] .lt{font-family:"Cormorant Garamond",serif;font-style:italic;font-size:19px;color:var(--sand3)}
+.libbtns{margin-top:10px}.libbtns .btn{font-size:13px;padding:11px 8px}
+.tabseg{display:flex;gap:6px;margin-bottom:12px}
+.tabseg button{flex:1;background:var(--card);border:1px solid var(--line);color:var(--mute);border-radius:10px;padding:9px 6px;font:inherit;font-size:13px;cursor:pointer}
+.tabseg button.on{border-color:var(--sand);color:var(--sand)}
+.libcats{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.li{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 12px;margin-bottom:8px}
+.li .tx{flex:1;min-width:0}.li .t{font-size:14px;font-weight:500}.li .st{font-size:12px;color:var(--mute);margin-top:3px}
+.li .ic{font-size:22px}
+.lbtn{flex:none;background:var(--bg2);border:1px solid var(--sand2);color:var(--sand);border-radius:10px;padding:8px 10px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.lbtn:disabled{border-color:var(--line);color:var(--ok);cursor:default}
+.chal .ct{display:flex;align-items:center;gap:12px;cursor:pointer;user-select:none}
+.chal .ct .t{flex:1;font-size:15px;line-height:1.4}
+.chal .ct.done .box{background:var(--ok);border-color:var(--ok)}
+.chal .ct.done .box::after{content:"";width:7px;height:12px;border:solid #13180f;border-width:0 3px 3px 0;transform:rotate(45deg) translate(-1px,-1px)}
+.chal .ct.done .t{color:var(--mute)}
+.dots{display:grid;grid-template-columns:repeat(15,minmax(0,1fr));gap:5px;margin:14px 0 4px}
+.dots i{display:block;width:100%;aspect-ratio:1;border-radius:50%;background:var(--bg2);border:1px solid var(--line);box-sizing:border-box}
+.dots i.ok{background:var(--ok);border-color:var(--ok)}
+.dots i.miss{background:transparent;border-color:#5a3b33}
+.dots i.cur{border-color:var(--sand);border-width:2px}
+.chal .cf{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--dim);margin-top:8px}
+.chal .cf button{background:none;border:none;color:var(--dim);font:inherit;font-size:12px;text-decoration:underline;cursor:pointer;padding:6px 0}
+.chal .fin{text-align:center;font-size:15px;line-height:1.5}
 .quote{text-align:center;font-family:"Cormorant Garamond",serif;font-style:italic;font-size:17px;color:var(--mute);margin-top:30px}
 </style>
 </head>
@@ -401,6 +428,7 @@ input[type=time]::-webkit-date-and-time-value{text-align:left}
   </header>
 
   <div class="view on" id="v-day">
+  <div class="lesson" id="lesson" hidden><div class="lk" id="lessonK"></div><div class="lt" id="lessonT"></div></div>
   <div class="hero">
     <div class="hg" id="hg" aria-hidden="true">
     <svg class="ring" viewBox="0 0 300 300">
@@ -473,6 +501,12 @@ input[type=time]::-webkit-date-and-time-value{text-align:left}
     <div class="alldone" id="alldone">Бүгдийг хийлээ. Өнөөдрийн элс дэмий урсаагүй.</div>
     <div id="tasks"></div>
     <div class="small" id="remHint" style="text-align:center" hidden>⏰ Сануулга зөвхөн апп нээлттэй үед ирнэ</div>
+    <div class="pair2 libbtns" id="libBtns" hidden><button class="btn" id="openLib">📚 Дадлын сан</button><button class="btn" id="openChal">🏁 30 хоногийн сорилт</button></div>
+  </section>
+
+  <section id="chalSec" hidden>
+    <div class="sh"><h2 id="chName"></h2><div class="count" id="chDay"></div></div>
+    <div class="card chal" id="chCard"></div>
   </section>
 
   <section id="wkDaySec" hidden>
@@ -655,8 +689,18 @@ input[type=time]::-webkit-date-and-time-value{text-align:left}
   </div>
 </div>
 
+<div class="sheet" id="lib">
+  <div class="panel" role="dialog" aria-modal="true" aria-labelledby="libTitle">
+    <h3 id="libTitle" tabindex="-1">Дадлын сан</h3>
+    <div class="tabseg" id="libTabs" role="tablist"><button data-t="habits" role="tab">📚 Бэлэн дадал</button><button data-t="chal" role="tab">🏁 30 хоногийн сорилт</button></div>
+    <div id="libBody"></div>
+    <button class="btn" id="libClose">Хаах</button>
+  </div>
+</div>
+
 <div class="toast" id="toast" role="status" aria-live="polite"><span id="toastMsg"></span><button id="toastBtn" hidden></button><button id="toastX" class="tx" aria-label="Хаах" hidden>×</button></div>
 
+<script src="i18n.js"></script>
 <script>
 const DEFAULT = {
   // Example schedule for a first start; each person changes it in Settings.
@@ -1078,6 +1122,7 @@ function renderTasks(){
   if(typeof renderReview==="function") renderReview();
   if(typeof renderSleep==="function") renderSleep();
   if(typeof renderWeekDay==="function") renderWeekDay();
+  if(window.chalReady){renderLesson(); renderChal()}            // set once the challenge data below has loaded
 }
 /* ---------- amounts logged on tasks (km run, pages read, reps…) ---------- */
 let qty=store.get("elsen_qty",{});
@@ -1697,6 +1742,7 @@ addEventListener("popstate",e=>{
   if(ignorePop){ignorePop--; return}
   const st=e.state||{};
   if(!st.sheet) closeSheetUI();
+  if(!st.lib) closeLibUI();
   const v=st.view||"v-day";
   if(!$(v).classList.contains("on")) showView(v,true);
 });
@@ -2343,7 +2389,7 @@ $("installBtn").onclick=async()=>{if(!installEvt)return;installEvt.prompt();try{
 renderInstall();
 
 /* ---------- backup: everything lives only on this phone, so let people keep a copy ---------- */
-const DATA_KEYS=["elsen_cfg","elsen_hist","elsen_tm","elsen_snap","elsen_sw","elsen_pantry","elsen_foodcfg","elsen_plan","elsen_water","elsen_qty","elsen_review","elsen_sleep","elsen_rest"];
+const DATA_KEYS=["elsen_cfg","elsen_hist","elsen_tm","elsen_snap","elsen_sw","elsen_pantry","elsen_foodcfg","elsen_plan","elsen_water","elsen_qty","elsen_review","elsen_sleep","elsen_rest","elsen_chal"];
 function backupData(){
   const data={};
   DATA_KEYS.forEach(k=>{try{const v=localStorage.getItem(k); if(v!=null) data[k]=JSON.parse(v)}catch(e){}});
@@ -2461,6 +2507,127 @@ if("serviceWorker" in navigator && /^https?:$/.test(location.protocol)){
 
 // Respect "reduce motion": stop the falling-sand stream animation.
 try{if(REDUCED)document.querySelector("svg.glass").pauseAnimations()}catch(e){}
+
+/* ---------- daily lesson, habit library, 30-day challenges (texts in i18n.js) ---------- */
+// index.html alone (e.g. a claude.ai artifact) has no i18n.js: these parts then stay hidden.
+const I18=typeof I18N!=="undefined"?I18N:{langs:{},ui:{},lessons:[],cats:[],library:[],challenges:[]};
+const LI=()=>Math.max(0,["mn","en","cs"].indexOf(cfg.lang));
+const tx=a=>Array.isArray(a)?(a[LI()]||a[0]):String(a??"");
+const LESSON_KIND={p:"Монгол зүйр үг",s:"Сургаал үг",t:"Зөвлөгөө"};
+// One lesson per day of the year, the same for everyone on that date.
+function lessonOf(k){const L=I18.lessons; return L.length?L[daysBetween(k.slice(0,4)+"-01-01",k)%L.length]:null}
+function renderLesson(){
+  const it=lessonOf(dayKey(new Date())), box=$("lesson"); box.hidden=!it; if(!it) return;
+  box.dataset.kind=it[0]; $("lessonK").textContent="Өдрийн сургамж · "+LESSON_KIND[it[0]]; $("lessonT").textContent=tx(it.slice(1));
+}
+const doseText=(d,unit)=>!d?"":d[0]===d[1]?`${d[0]} ${unit}`:`${d[0]} → ${d[1]} ${unit} · 7 хоног тутам +${d[2]}`;
+let libTab="habits", libCat=null, libY=0;
+function openLib(tab){
+  libTab=tab||"habits"; renderLib();
+  if(!$("lib").classList.contains("on")){
+    libY=window.scrollY; document.body.style.top=-libY+"px";
+    $("lib").classList.add("on"); document.body.classList.add("noscroll");
+    histPush({...(history.state||{}),lib:1});
+  }
+  $("lib").querySelector(".panel").scrollTop=0;
+  setTimeout(()=>$("libTitle").focus({preventScroll:true}),0);
+}
+function closeLibUI(){
+  if(!$("lib").classList.contains("on")) return;
+  $("lib").classList.remove("on"); document.body.classList.remove("noscroll"); document.body.style.top=""; window.scrollTo(0,libY);
+}
+function closeLib(){closeLibUI(); if(history.state&&history.state.lib) histBack()}
+$("openLib").onclick=()=>openLib("habits");
+$("openChal").onclick=()=>openLib("chal");
+$("libClose").onclick=closeLib;
+$("lib").onclick=e=>{if(e.target.id==="lib")closeLib()};
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&$("lib").classList.contains("on"))closeLib()});
+$("libTabs").querySelectorAll("button").forEach(b=>b.onclick=()=>{libTab=b.dataset.t; renderLib()});
+function libRow(icon,name,sub,btnText,btnOff,onAdd,label){
+  const r=document.createElement("div"); r.className="li";
+  r.innerHTML=`${icon?`<span class="ic" aria-hidden="true">${icon}</span>`:""}<div class="tx"><div class="t"></div><div class="st"></div></div><button class="lbtn"></button>`;
+  r.querySelector(".t").textContent=name; r.querySelector(".st").textContent=sub; r.querySelector(".st").hidden=!sub;
+  const b=r.querySelector(".lbtn"); b.textContent=btnText; b.disabled=btnOff; b.setAttribute("aria-label",label); b.onclick=onAdd;
+  return r;
+}
+function renderLib(){
+  $("libTabs").querySelectorAll("button").forEach(b=>{const on=b.dataset.t===libTab; b.classList.toggle("on",on); b.setAttribute("aria-selected",String(on))});
+  const box=$("libBody"); box.innerHTML="";
+  if(libTab==="habits"){
+    const cur=libCat||(I18.cats[0]||{}).id, chips=document.createElement("div"); chips.className="libcats";
+    I18.cats.forEach(c=>{const b=document.createElement("button"); b.className="chip"+(c.id===cur?" on":""); b.textContent=`${c.icon} ${tx(c.name)}`;
+      b.setAttribute("aria-pressed",String(c.id===cur)); b.onclick=()=>{libCat=c.id; renderLib()}; chips.appendChild(b)});
+    box.appendChild(chips);
+    I18.library.filter(x=>x.cat===cur).forEach(it=>{
+      const have=cfg.tasks.some(t=>t.lib===it.id), f=it.freq&&it.freq.t!=="daily"?freqText(it.freq):"";
+      box.appendChild(libRow("",tx(it.name),[doseText(it.dose,tx(it.unit)),f].filter(Boolean).join(" · "),have?"✓ Нэмсэн":"+ Нэмэх",have,()=>addFromLib(it),
+        have?`${tx(it.name)}: нэмсэн`:`Нэмэх: ${tx(it.name)}`));
+    });
+  } else {
+    I18.challenges.forEach(c=>{
+      const on=chal.cur&&chal.cur.id===c.id;
+      box.appendChild(libRow(c.icon,tx(c.name),tx(c.desc),on?"Явж байна":"Эхлүүлэх",!!chal.cur,()=>startChal(c.id),
+        on?`${tx(c.name)}: явж байна`:`Эхлүүлэх: ${tx(c.name)}`));
+    });
+    if(chal.cur){const n=document.createElement("div"); n.className="small"; n.textContent="Нэг удаад нэг сорилт. Шинийг эхлүүлэхийн тулд одоогийнхоо сорилтыг дуусгаарай."; box.appendChild(n)}
+  }
+}
+// A ready-made habit joins the list in the current language, starting small from today.
+function addFromLib(it){
+  const k=dayKey(new Date());
+  const t={id:"h"+Date.now().toString(36),name:tx(it.name),min:0,rem:"",unit:"",link:"",freq:normFreq(it.freq),start:k,lib:it.id,after:"",
+    dose:it.dose?normDose({from:it.dose[0],to:it.dose[1],step:it.dose[2],unit:tx(it.unit),since:k}):null};
+  if(it.id==="bh"&&cfg.waterGoal>0&&!cfg.tasks.some(x=>x.link==="water")){t.link="water"; t.dose=null}   // water: the cup counter does the counting
+  cfg.tasks.push(t); applyDose(); store.set("elsen_cfg",cfg);
+  renderTasks(); renderWeek(); renderLib(); syncWaterTask(); buzz(12);
+  toast(`«${t.name}» нэмэгдлээ ✓`);
+}
+// 30-day challenge: {cur:{id,start}, log:{"id@start":{dayIndex:"HH:MM"}}, past:[{id,start,end,done}]}
+let chal=store.get("elsen_chal",{});
+if(!isObj(chal)) chal={};
+if(!isObj(chal.log)) chal.log={};
+if(!Array.isArray(chal.past)) chal.past=[];
+if(!isObj(chal.cur)||!isKey(chal.cur.start)||typeof chal.cur.id!=="string") chal.cur=null;
+const chalKey=c=>c.id+"@"+c.start, saveChal=()=>store.set("elsen_chal",chal);
+const chalDef=id=>I18.challenges.find(c=>c.id===id);
+function chalText(c,i){return c.vals?(c.vals[i]===0?tx(c.rest):tx(c.tpl).replace("{n}",c.vals[i])):tx(c.days[i])}
+function startChal(id){
+  if(chal.cur||!chalDef(id)) return;
+  chal.cur={id,start:dayKey(new Date())}; chal.log[chalKey(chal.cur)]={}; saveChal();
+  closeLib(); renderChal(); buzz(12);
+  setTimeout(()=>$("chalSec").scrollIntoView({behavior:REDUCED?"auto":"smooth",block:"center"}),50);
+}
+function endChal(){
+  const c=chal.cur; if(!c) return;
+  chal.past.push({id:c.id,start:c.start,end:dayKey(new Date()),done:Object.keys(chal.log[chalKey(c)]||{}).length});
+  chal.cur=null; saveChal(); renderChal();
+}
+function renderChal(){
+  $("libBtns").hidden=!I18.library.length;
+  const cur=chal.cur, c=cur&&chalDef(cur.id), sec=$("chalSec");
+  sec.hidden=!c; if(!c) return;
+  const today=dayKey(new Date()), i=Math.max(0,daysBetween(cur.start,today)), log=chal.log[chalKey(cur)]||(chal.log[chalKey(cur)]={});
+  const n=Object.keys(log).length, card=$("chCard");
+  $("chName").textContent=`${c.icon} ${tx(c.name)}`;
+  card.innerHTML="";
+  if(i>=30){
+    $("chDay").textContent=`${n}/30`;
+    card.innerHTML=`<div class="fin">🎉 Сорилт дууслаа!<br>30 өдрөөс <b>${n}</b>-д нь биелүүлсэн.</div><button class="btn primary">Дуусгах</button>`;
+    card.querySelector("button").onclick=endChal; return;
+  }
+  $("chDay").textContent=`${i+1} ${ordSuf(i+1)} өдөр / 30`;
+  const done=!!log[i], row=document.createElement("div");
+  row.className="ct"+(done?" done":""); row.tabIndex=0; row.setAttribute("role","checkbox"); row.setAttribute("aria-checked",String(done));
+  row.innerHTML=`<div class="box"></div><div class="t"></div>`; row.querySelector(".t").textContent=chalText(c,i);
+  row.onclick=()=>{if(log[i]) delete log[i]; else {log[i]=hhmm(new Date()); buzz(15)} saveChal(); renderChal()};
+  row.onkeydown=e=>{if(e.key===" "||e.key==="Enter"){e.preventDefault(); row.click()}};
+  const dots=document.createElement("div"); dots.className="dots"; dots.setAttribute("aria-label",`30 өдрөөс ${n} биелсэн`); dots.setAttribute("role","img");
+  for(let d=0;d<30;d++){const x=document.createElement("i"); x.className=log[d]?"ok":d<i?"miss":d===i?"cur":""; dots.appendChild(x)}
+  const foot=document.createElement("div"); foot.className="cf"; foot.innerHTML=`<span>${n} биелсэн</span><button>Зогсоох</button>`;
+  foot.querySelector("button").onclick=()=>toast("Сорилтыг зогсоох уу? Тэмдэглэл хадгалагдана.","Зогсоох",endChal,8000);
+  card.append(row,dots,foot);
+}
+window.chalReady=true;
 
 let startView="v-day"; try{startView=sessionStorage.getItem("elsen_view")||"v-day"}catch(e){}
 // Home-screen shortcuts open a tab directly: ./?v=v-sw, ./?v=v-stat
