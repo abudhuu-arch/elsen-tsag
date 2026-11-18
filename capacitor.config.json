@@ -1,0 +1,17 @@
+{
+  "appId": "mn.elsentsag.app",
+  "appName": "Элсэн цаг",
+  "webDir": "www",
+  "backgroundColor": "#0f0d0b",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#0f0d0b",
+    "scrollEnabled": true,
+    "limitsNavigationsToAppBoundDomains": false
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "presentationOptions": ["banner", "sound", "list"]
+    }
+  }
+}

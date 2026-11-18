@@ -40,6 +40,7 @@ async function open(t, seed, opts = {}) {
   page.on('response', r => { if (r.status() >= 400) errors.push(`HTTP ${r.status()} ${r.url()}`); });
   // No seed: a person who already used the app (history exists, settings never saved) → the early default list.
   // opts.fresh: a brand-new person (empty storage) → welcome screens.
+  if (opts.setup) await opts.setup(ctx);
   if (!seed && !opts.fresh) seed = `()=>{localStorage.elsen_hist='{}'}`;
   if (seed) await ctx.addInitScript(`if(!sessionStorage.getItem('__seeded')){localStorage.clear();(${seed})();sessionStorage.setItem('__seeded','1')}`);
   await page.goto(base + (opts.query || ''));
@@ -932,4 +933,130 @@ test('old phone data: every saved key survives the upgrade and language changes 
   assert.deepEqual(c.tasks.map(x => [x.id, x.name, x.rem]), [['t1', 'Гадаад хэл 15 минут', '07:30'], ['t2', 'Ус уух 8 аяга', ''], ['t5', 'Ном унших 30 минут', '']]);
   assert.equal(c.dayStart, '04:00');
   assert.deepEqual(JSON.parse(JSON.parse(await page.evaluate(() => localStorage.elsen_premig_v1)).data.elsen_cfg), old.elsen_cfg);
+});
+
+/* ---------- the iOS app (Capacitor): a stand-in for the native plugins, kept in Node so it outlives reloads ---------- */
+const FAKE_CAP = `(()=>{const call=(...a)=>window.__nat(...a);
+window.Capacitor={isNativePlatform:()=>true,Plugins:{
+ Preferences:{get:({key})=>call('pget',key).then(value=>({value})),set:({key,value})=>call('pset',key,value),remove:({key})=>call('premove',key),keys:()=>call('pkeys').then(keys=>({keys}))},
+ LocalNotifications:{checkPermissions:()=>call('lperm').then(display=>({display})),requestPermissions:()=>call('lask').then(display=>({display})),
+  getPending:()=>call('lpending').then(notifications=>({notifications})),cancel:({notifications})=>call('lcancel',notifications.map(n=>n.id)),
+  schedule:({notifications})=>call('lschedule',notifications.map(n=>({...n,at:+new Date(n.schedule.at)})))},
+ Filesystem:{writeFile:({path,data})=>call('fwrite',path,data).then(()=>({uri:'file:///cache/'+path}))},
+ Share:{share:o=>call('share',o)}}}})()`;
+function nativeApp(perm = 'granted') {
+  const st = { pref: {}, pending: new Map(), shared: [], file: null, perm };
+  return { st, async setup(ctx) {
+    await ctx.exposeFunction('__nat', (op, a, b) => {
+      switch (op) {
+        case 'pget': return a in st.pref ? st.pref[a] : null;
+        case 'pset': st.pref[a] = b; return;
+        case 'premove': delete st.pref[a]; return;
+        case 'pkeys': return Object.keys(st.pref);
+        case 'lperm': return st.perm;
+        case 'lask': st.perm = 'granted'; return st.perm;
+        case 'lpending': return [...st.pending.values()].map(n => ({ id: n.id }));
+        case 'lcancel': a.forEach(id => st.pending.delete(id)); return;
+        case 'lschedule': a.forEach(n => st.pending.set(n.id, n)); return;
+        case 'fwrite': st.file = { path: a, data: b }; return;
+        case 'share': st.shared.push(a); return;
+      }
+    });
+    await ctx.addInitScript(FAKE_CAP);
+  } };
+}
+const until = async (fn, why, ms = 5000) => { const end = Date.now() + ms;
+  for (;;) { try { if (await fn()) return; } catch (e) { /* page reloading */ } if (Date.now() > end) assert.fail('timed out: ' + why); await new Promise(r => setTimeout(r, 50)); } };
+
+test('iOS app: old localStorage is copied to Preferences, writes are mirrored, an emptied web storage comes back', async t => {
+  const nat = nativeApp();
+  const cfgOld = { dayStart: '00:00', tasks: [{ id: 't1', name: 'Ном унших', min: 0 }, { id: 't2', name: 'Алхах', min: 0 }] };
+  const histOld = { [keyAgo(1)]: { t1: '21:00', t2: '18:00' }, [keyAgo(2)]: { t1: '20:00' } };
+  const { page } = await open(t, `()=>{localStorage.elsen_cfg=${JSON.stringify(JSON.stringify(cfgOld))};localStorage.elsen_hist=${JSON.stringify(JSON.stringify(histOld))};localStorage.elsen_pantry='["Өндөг"]'}`, { setup: nat.setup });
+  await until(() => nat.st.pref.elsen_native_v1, 'first copy');
+  assert.equal(await page.evaluate(() => window.NATIVE), true);
+  // every elsen_* key is in Preferences, byte for byte, and localStorage still has its own copy
+  const ls = await page.evaluate(() => Object.fromEntries(Object.keys(localStorage).filter(k => /^elsen_/.test(k)).map(k => [k, localStorage.getItem(k)])));
+  for (const k in ls) if (k !== 'elsen_native_ls') assert.equal(nat.st.pref[k], ls[k], k);
+  assert.deepEqual(JSON.parse(ls.elsen_hist), histOld);
+  assert.equal(ls.elsen_pantry, '["Өндөг"]');
+  assert.ok(nat.st.pref.elsen_premig_v1, 'the pre-upgrade copy goes along too');
+  // a new tick is mirrored
+  await page.locator('#tasks .task').nth(0).locator('.t').click();
+  await until(() => JSON.parse(nat.st.pref.elsen_hist)[keyAgo(0)]?.t1, 'mirrored tick');
+  // iOS empties the web storage: everything comes back from Preferences, no welcome screens
+  await page.evaluate(() => { localStorage.clear(); location.reload(); });
+  await until(() => page.evaluate(() => localStorage.elsen_native_ls && document.readyState === 'complete' && typeof cfg === 'object' && cfg.tasks.length === 2), 'restored');
+  const back = await page.evaluate(() => JSON.parse(localStorage.elsen_hist));
+  for (const d in histOld) assert.deepEqual(back[d], histOld[d]);
+  assert.ok(back[keyAgo(0)].t1);
+  assert.equal(await page.evaluate(() => localStorage.elsen_pantry), '["Өндөг"]');
+  assert.ok(await page.isHidden('#onb'));
+  assert.equal(await page.locator('#tasks .task').count(), 2);
+});
+
+test('iOS app: reminders and a running timer are handed to the system for when the app is closed', async t => {
+  const nat = nativeApp('prompt');
+  const day = new Date(2026, 10, 18, 8, 0);      // Wednesday 08:00
+  const k0 = '2026-11-18';
+  const tasks = [{ id: 'a', name: 'Англи хэл', min: 15, rem: '09:30' }, { id: 'b', name: 'Сунгалт', min: 0, rem: '07:00' },
+    { id: 'c', name: 'Гүйх', min: 0, rem: '19:00', freq: { t: 'days', d: [6] } }, { id: 'd', name: 'Ном', min: 0, rem: '21:00' }];
+  const { page } = await open(t, `()=>{localStorage.elsen_cfg=${JSON.stringify(JSON.stringify({ dayStart: '00:00', tasks }))};localStorage.elsen_hist=${JSON.stringify(JSON.stringify({ [k0]: { d: '07:50' } }))}}`, { setup: nat.setup, time: day });
+  await page.waitForTimeout(800);
+  assert.equal(nat.st.pending.size, 0, 'nothing is scheduled before the permission');
+  await page.click('#openSet');
+  assert.ok(await page.isVisible('#notifBtn'));
+  await page.click('#notifBtn');
+  await until(() => nat.st.pending.size > 0, 'scheduled');
+  await page.waitForTimeout(600);
+  const keys = [...nat.st.pending.values()].map(n => n.extra.key);
+  const of = id => keys.filter(x => x.startsWith(`rem-${id}-`)).sort();
+  assert.equal(of('a').length, 8, 'today 09:30 and the next 7 days');
+  assert.equal(of('a')[0], 'rem-a-' + k0);
+  assert.ok(!of('b').includes('rem-b-' + k0), '07:00 has passed today');
+  assert.equal(of('b').length, 7);
+  assert.deepEqual(of('c'), ['rem-c-2026-11-21'], 'Saturday only (window: today + 7 days)');
+  assert.ok(!of('d').includes('rem-d-' + k0), 'done today: no reminder');
+  const a0 = [...nat.st.pending.values()].find(n => n.extra.key === 'rem-a-' + k0);
+  assert.equal(a0.at, +new Date(2026, 10, 18, 9, 30));
+  assert.match(a0.title, /Англи хэл/);
+  assert.match(await page.textContent('#notifNote'), /апп хаалттай үед ч/);
+  // a running timer: its end is scheduled; pausing takes it away
+  await page.click('#save');
+  await page.locator('#tasks .task').nth(0).locator('.tbtn').click();
+  await until(() => [...nat.st.pending.values()].some(n => n.extra.key === 'timer-a'), 'timer scheduled');
+  const tmr = [...nat.st.pending.values()].find(n => n.extra.key === 'timer-a');
+  assert.equal(tmr.at, +day + 15 * 60000);
+  await page.locator('#tasks .task').nth(0).locator('.tbtn').click();
+  await until(() => ![...nat.st.pending.values()].some(n => n.extra.key === 'timer-a'), 'timer removed');
+  // ticking a habit removes today's reminder for it
+  await page.locator('#tasks .task').nth(0).locator('.t').click();
+  await until(() => !keys.length || ![...nat.st.pending.values()].some(n => n.extra.key === 'rem-a-' + k0), 'done today');
+});
+
+test('iOS app: food plan never asks Claude, shows the medical note; backup goes to the share sheet; no install hint', async t => {
+  const nat = nativeApp();
+  const { page } = await open(t, `()=>{localStorage.elsen_hist=${JSON.stringify(JSON.stringify({ [keyAgo(1)]: { t1: '08:00' } }))};
+    window.claude={use:async()=>{throw new Error('Claude must not be asked in the iOS app')}}}`, { setup: nat.setup });
+  await page.click('nav.tabs button[data-v="v-food"]');
+  assert.match(await page.textContent('#v-food .disclaim'), /эмнэлгийн зөвлөгөө биш/);
+  await page.click('#gen');
+  await page.waitForSelector('#plan .meal');
+  assert.match(await page.textContent('#genStatus'), /офлайн/);
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.elsen_plan).src), 'local');
+  await page.click('#openSet');
+  assert.ok(await page.isHidden('#appSec'));
+  await page.click('#exportBtn');
+  await until(() => nat.st.shared.length, 'share sheet');
+  assert.match(nat.st.file.path, /^elsen-tsag-\d{4}-\d\d-\d\d\.json$/);
+  assert.deepEqual(JSON.parse(nat.st.file.data).data.elsen_hist, { [keyAgo(1)]: { t1: '08:00' } });
+  assert.deepEqual(nat.st.shared[0].files, ['file:///cache/' + nat.st.file.path]);
+});
+
+test('web: the medical note is there in every language and native.js stays out of the way', async t => {
+  const { page } = await open(t);
+  assert.equal(await page.evaluate(() => window.NATIVE), false);
+  await page.click('#openSet'); await page.selectOption('#langSel', 'en');
+  await page.waitForFunction(() => document.documentElement.lang === 'en');
+  assert.match(await page.textContent('#v-food .disclaim'), /not medical advice/);
 });

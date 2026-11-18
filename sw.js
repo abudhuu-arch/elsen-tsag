@@ -1,10 +1,11 @@
 /* Элсэн цаг — service worker: works offline by caching every file the app needs. */
-const VERSION = "elsen-v7";
+const VERSION = "elsen-v8";
 const SHELL = [
   "./",
   "./index.html",
   "./manifest.json",
   "./i18n.js",
+  "./native.js",
   "./icons/icon.svg",
   "./icons/icon-192.png",
   "./icons/icon-512.png",

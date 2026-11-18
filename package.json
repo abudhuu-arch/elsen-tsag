@@ -1,0 +1,21 @@
+{
+  "name": "elsen-tsag",
+  "private": true,
+  "description": "Элсэн цаг: the web app (index.html) plus its native iOS shell (Capacitor). The web app itself has no dependencies.",
+  "scripts": {
+    "build": "node scripts/build-web.mjs",
+    "ios": "node scripts/build-web.mjs && npx cap sync ios && npx cap open ios",
+    "sync": "node scripts/build-web.mjs && npx cap sync ios"
+  },
+  "dependencies": {
+    "@capacitor/core": "^8.6.2",
+    "@capacitor/filesystem": "^8.1.5",
+    "@capacitor/ios": "^8.6.2",
+    "@capacitor/local-notifications": "^8.3.1",
+    "@capacitor/preferences": "^8.0.1",
+    "@capacitor/share": "^8.0.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.6.2"
+  }
+}

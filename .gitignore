@@ -1,3 +1,5 @@
 node_modules/
 .DS_Store
 logs/
+# built copy of the web app for the native shell (npm run build)
+www/

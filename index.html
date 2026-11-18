@@ -231,6 +231,7 @@ select{background:var(--card);border:1px solid var(--line);color:var(--ink);bord
 .use{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px;line-height:1.45}
 .use b{color:var(--sand3);flex:none;min-width:80px}
 .status{font-size:13px;color:var(--mute);text-align:center;margin:10px 0}
+.disclaim{font-size:12px;line-height:1.5;color:var(--mute);margin:8px 0 0;padding-top:10px;border-top:1px solid var(--line)}
 .tip{font-size:14px;line-height:1.5;padding:6px 0;color:var(--mute)}
 .tip::before{content:"• ";color:var(--sand)}
 .wrap{padding-top:calc(20px + env(safe-area-inset-top))}
@@ -676,6 +677,7 @@ input[type=time]::-webkit-date-and-time-value{text-align:left}
         <input type="text" id="note" placeholder="Нэмэлт: идэхгүй хоол, дуртай хоол г.м." style="width:100%;margin-top:4px">
         <button class="btn primary" id="gen">Хөтөлбөр гаргах</button>
         <div class="status" id="genStatus"></div>
+        <p class="disclaim">⚕️ Энэ хөтөлбөр бол ерөнхий зөвлөмж, эмнэлгийн зөвлөгөө биш. Эрүүл мэндийн асуудал, харшил, жирэмслэлт эсвэл тусгай хооллолттой бол эмч, мэргэжилтэнтэй зөвлөлдөөрэй.</p>
       </div>
       <div id="plan"></div>
     </section>
@@ -760,6 +762,7 @@ input[type=time]::-webkit-date-and-time-value{text-align:left}
 
 <div class="toast" id="toast" role="status" aria-live="polite"><span id="toastMsg"></span><button id="toastBtn" hidden></button><button id="toastX" class="tx" aria-label="Хаах" hidden>×</button></div>
 
+<script src="native.js"></script>
 <script src="i18n.js"></script>
 <script>
 // A first start has no habits: the welcome screens help pick them. LEGACY_TASKS is the list early versions
@@ -777,7 +780,8 @@ const LEGACY_TASKS=[
   ];
 const store = {
   get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},
-  set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}
+    if(window.NATIVE&&/^elsen_(cfg|hist|tm|rest)$/.test(k)) nativePlan()}
 };
 // Data format version. Before the first upgrade to a new format, an untouched copy of every saved key
 // goes to elsen_premig_v<old>; nothing ever deletes it (restore and reset leave it alone too).
@@ -1802,6 +1806,7 @@ $("save").onclick=()=>{
   cfg.sandSound=$("sandOn").checked; if(cfg.sandSound) unlockAudio();
   {const w=parseInt($("waterGoalIn").value,10); if(w>=0&&w<=20) cfg.waterGoal=w}
   store.set("elsen_cfg",cfg); lastRemCheck=-1; lastKey=dayKey(new Date());
+  if(window.NATIVE&&cfg.tasks.some(t=>t.rem)) askNotify();          // a reminder needs the permission to reach a closed app
   closeSettings(); drawBar(); renderTasks(); renderWeek(); tick(); sandSoundSync(); renderFoodShift(); renderPlan(); syncWaterTask();
   toast(T("Хадгаллаа ✓"));
 };
@@ -1922,13 +1927,18 @@ $("swLap").onclick=()=>{
   swSave(); swRender();
 };
 
-/* ---------- reminders (no server: they fire only while the app is open) ---------- */
-const hasNotif="Notification" in window;
+/* ---------- reminders ----------
+   Web: no server, so they fire only while the app is open. iOS app: nativePlan() also hands the next week's
+   reminders and any running timer to the system (native.js), so they arrive while the app is closed. */
+const hasNotif=!!window.NATIVE||"Notification" in window;
+const notifPerm=()=>window.NATIVE?NativeApp.perm():hasNotif?Notification.permission:"denied";
 let notified=store.get("elsen_notified",{}), lastRemCheck=-1;
 const sinceStart=min=>((min-toMin(cfg.dayStart))%1440+1440)%1440;   // minutes after the day starts
 const nowSince=()=>{const n=new Date();return sinceStart(n.getHours()*60+n.getMinutes())};
 async function notify(title,body,tag){
-  if(!hasNotif||Notification.permission!=="granted") return false;
+  if(!hasNotif||notifPerm()!=="granted") return false;
+  if(window.NATIVE){ if(/^(rem|timer)-/.test(tag||"")) return true;   // already scheduled with the system by nativePlan()
+    return NativeApp.notify(title,body,tag) }
   // badge: Android draws it as a one-colour silhouette in the status bar, so it must be white-on-transparent
   const opt={body,tag,renotify:!!tag,icon:"icons/icon-192.png",badge:"icons/badge-96.png",lang:"mn",
     silent:cfg.sound===false, ...(cfg.sound===false?{}:{vibrate:[200,100,200]})};
@@ -1936,10 +1946,11 @@ async function notify(title,body,tag){
   try{new Notification(title,opt); return true}catch(e){return false}
 }
 async function askNotify(force){
-  if(!hasNotif||Notification.permission!=="default") return;
+  if(!hasNotif||notifPerm()!=="default") return;
   if(!force&&store.get("elsen_notif_asked",false)) return;
   store.set("elsen_notif_asked",true);
-  try{await Notification.requestPermission()}catch(e){}
+  if(window.NATIVE){ await NativeApp.askNotif(); nativePlan() }
+  else try{await Notification.requestPermission()}catch(e){}
   renderNotif();
 }
 function renderNotif(){
@@ -1947,12 +1958,40 @@ function renderNotif(){
   b.hidden=true; tst.hidden=true;
   if(!hasNotif){
     n.textContent=T(isIOS&&!isStandalone()?"iPhone дээр мэдэгдэл авахын тулд эхлээд аппыг нүүр дэлгэцэнд суулгана уу (доорх заавар).":"Энэ браузер мэдэгдэл дэмжихгүй. Сануулга апп дотор гарна.");
-  } else if(Notification.permission==="granted"){ n.textContent=T("✓ Мэдэгдэл зөвшөөрөгдсөн."); tst.hidden=false; }
-  else if(Notification.permission==="denied"){ n.textContent=T("Мэдэгдэл хаагдсан байна. Утас/браузерын тохиргооноос «Элсэн цаг»-д зөвшөөрөл өгнө үү. Тэр болтол сануулга апп дотор гарна."); }
+  } else if(notifPerm()==="granted"){ n.textContent=T(window.NATIVE?"✓ Мэдэгдэл зөвшөөрөгдсөн. Сануулга апп хаалттай үед ч ирнэ.":"✓ Мэдэгдэл зөвшөөрөгдсөн."); tst.hidden=false; }
+  else if(notifPerm()==="denied"){ n.textContent=T("Мэдэгдэл хаагдсан байна. Утас/браузерын тохиргооноос «Элсэн цаг»-д зөвшөөрөл өгнө үү. Тэр болтол сануулга апп дотор гарна."); }
   else { n.textContent=T("Таймер дуусах, сануулгын цаг болоход мэдэгдэл авахын тулд зөвшөөрнө үү."); b.hidden=false; }
 }
 $("notifBtn").onclick=()=>askNotify(true);
-$("notifTest").onclick=async()=>{unlockAudio(); chime(); if(!await notify(T("Элсэн цаг"),T("Сануулга ингэж харагдана ⏳"),"test")) toast(T("Мэдэгдэл илгээж чадсангүй"))};
+$("notifTest").onclick=async()=>{unlockAudio(); chime();
+  // iOS app: arrives in 5 s, so there is time to close the app and see it on the lock screen
+  if(window.NATIVE){ if(await NativeApp.notify(T("Элсэн цаг"),T("Сануулга ингэж харагдана ⏳"),"test",5000)) toast(T("5 секундын дараа мэдэгдэл ирнэ. Аппаа хаагаад үзээрэй.")); else toast(T("Мэдэгдэл илгээж чадсангүй")); return }
+  if(!await notify(T("Элсэн цаг"),T("Сануулга ингэж харагдана ⏳"),"test")) toast(T("Мэдэгдэл илгээж чадсангүй"))};
+// iOS app: the system shows reminders and timer ends while the app is closed. Plan the next 7 days again
+// whenever habits, history, timers or rest days change, and when the app comes back to the screen.
+function nativePlan(){
+  if(!window.NATIVE) return;
+  clearTimeout(nativePlan.t);
+  nativePlan.t=setTimeout(()=>{ try{
+    const out=[], now=Date.now(), b=new Date();
+    for(const k in tm) for(const id in tm[k]){ const s=tm[k][id]; if(!s||!s.run) continue;
+      const t=cfg.tasks.find(x=>x.id===id); if(!t||!t.min) continue;
+      const left=t.min*60000-tmProg(s);
+      if(left>0) out.push({key:"timer-"+id,at:now+left,title:T("Хугацаа дууслаа"),body:T("{name} · {n} минут дууслаа ✓",{name:t.name,n:t.min})}) }
+    for(let i=0;i<8;i++) cfg.tasks.forEach(t=>{ if(!isHM(t.rem)) return;
+      const [h,m]=t.rem.split(":").map(Number), at=new Date(b.getFullYear(),b.getMonth(),b.getDate()+i,h,m);
+      if(+at<=now) return; const k=dayKey(at);
+      if((hist[k]||{})[t.id]||!isDue(t,k)) return;
+      out.push({key:"rem-"+t.id+"-"+k,at:+at,title:"⏰ "+t.name,
+        body:t.min?T("{n} минутын таймераа эхлүүлэх цаг боллоо",{n:t.min}):T("Хийх цаг боллоо")}) });
+    out.sort((x,y)=>x.at-y.at);
+    NativeApp.plan(out);
+  }catch(e){console.warn(e)} },400);
+}
+if(window.NATIVE){
+  NativeApp.notifReady.then(()=>{renderNotif(); nativePlan()});
+  document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible") nativePlan()});
+}
 function remEditor(t){
   const l=document.createElement("label"); l.innerHTML=`<span>⏰ ${T("Сануулга")}</span>`;
   const i=document.createElement("input"); i.type="time"; i.value=t.rem||"";
@@ -2360,7 +2399,9 @@ function normalizePlan(p){
   };
 }
 async function getSample(){
-  // claude.ai artifact: window.claude.use("sample") resolves; standalone PWA: no window.claude -> null
+  // claude.ai artifact: window.claude.use("sample") resolves; standalone PWA: no window.claude -> null.
+  // The iOS app never asks Claude: its plan is always the built-in offline one.
+  if(window.NATIVE) return null;
   try{ if(window.claude&&typeof window.claude.use==="function") return await window.claude.use("sample"); }catch(e){}
   return null;
 }
@@ -2494,7 +2535,7 @@ const isAndroid=/android/i.test(navigator.userAgent);
 const inAppBrowser=/FBAN|FBAV|FB_IAB|Instagram|Messenger|Line\/|KAKAOTALK|; wv\)/i.test(navigator.userAgent);
 let installEvt=null;
 function renderInstall(){
-  if(isStandalone()){$("appSec").hidden=true;return}
+  if(window.NATIVE||isStandalone()){$("appSec").hidden=true;return}
   $("appSec").hidden=false;
   $("installBtn").hidden=!installEvt;
   $("installNote").textContent=inAppBrowser
@@ -2527,8 +2568,13 @@ async function exportBackup(){
   const name=`elsen-tsag-${dayKey(new Date())}.json`;
   const blob=new Blob([JSON.stringify(backupData(),null,1)],{type:"application/json"});
   let done=false;
+  // iOS app: write the file, then the share sheet ("Save to Files", AirDrop, Mail...)
+  if(window.NATIVE){
+    try{await NativeApp.shareFile(name,JSON.stringify(backupData(),null,1),T("Элсэн цаг · нөөц")); done=true}
+    catch(e){if(/cancel/i.test(e&&e.message||"")) return; toast(T("Нөөц хуулбар хадгалж чадсангүй")); return}
+  }
   // Phone: share sheet ("Save to Files", Drive, Telegram...). Works in an installed iPhone app where downloads don't.
-  if(matchMedia("(pointer:coarse)").matches&&navigator.canShare){
+  if(!done&&matchMedia("(pointer:coarse)").matches&&navigator.canShare){
     try{const f=new File([blob],name,{type:"application/json"});
       if(navigator.canShare({files:[f]})){await navigator.share({files:[f],title:T("Элсэн цаг · нөөц")}); done=true}}
     catch(e){if(e&&e.name==="AbortError") return}
