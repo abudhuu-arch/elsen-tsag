@@ -608,7 +608,6 @@ test('rest days: two a month per habit keep the streak; chosen with a button or 
   await page.clock.setFixedTime(new Date(2026, 10, 21, 12, 0)); await page.evaluate(() => tick());
   assert.doesNotMatch(await row(1).locator('.st').textContent(), /🔥/);
   // ticking a habit on a picked rest day clears the rest
-  await row(1).locator('.rbtn').click().catch(() => {});
   await page.evaluate(() => { setRest(cfg.tasks[0], dayKey(new Date()), true); renderTasks(); });
   await row(0).locator('.t').click();
   assert.equal(await page.evaluate(() => restPicked(cfg.tasks[0], dayKey(new Date()))), false);
