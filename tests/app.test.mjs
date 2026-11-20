@@ -128,7 +128,8 @@ test('a countdown running over the day boundary continues on the new day', async
 });
 
 test('reminder fires once, and a missed one is marked late', async t => {
-  const { page } = await open(t);
+  // midday, so "2 hours ago" is still today whenever the tests run (at 00:55 it would be yesterday's 22:55)
+  const { page } = await open(t, undefined, { time: new Date(2026, 10, 18, 12, 0) });
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.evaluate(() => {
     const at = m => { const d = new Date(Date.now() + m * 60000); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
